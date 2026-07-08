@@ -1,38 +1,39 @@
 // src/email/email.service.ts
 
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService {
-  private transporter: nodemailer.Transporter;
+    private transporter: nodemailer.Transporter;
 
-  constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.HOST, // o tu proveedor SMTP
-      port: process.env.SMTP,
-      secure: true,
-      auth: {
-        user: process.env.E_MAIL,
-        pass: 'p323+p2%16#^',
-      },
-    });
-  }
+    constructor(private readonly configService: ConfigService) {
+        this.transporter = nodemailer.createTransport({
+            host: this.configService.get<string>('HOST'),
+            port: this.configService.get<number>('SMTP'),
+            secure: true,
+            auth: {
+                user: this.configService.get<string>('E_MAIL'),
+                pass: this.configService.get<string>('SMTP_PASS'),
+            },
+        });
+    }
 
-  
 
-  async sendConfirmationEmail(
-    to: string,
-    name: string,
-    token: string,
-    codigo: string,
-  ) {
-    const url = `https://transmovi.mx/transmoviDev/#/account/verify?token=${token}`;
-    await this.transporter.sendMail({
-      from: `<${process.env.E_MAIL}>`,
-      to,
-      subject: '¡Bienvenido!',
-      html: `
+
+    async sendConfirmationEmail(
+        to: string,
+        name: string,
+        token: string,
+        codigo: string,
+    ) {
+        const url = `https://pendiente/#/account/verify?token=${token}`;
+        await this.transporter.sendMail({
+            from: `<${process.env.E_MAIL}>`,
+            to,
+            subject: '¡Bienvenido!',
+            html: `
 <!DOCTYPE html>
 <html lang="en">
 
@@ -53,7 +54,7 @@ export class MailService {
                     <tr>
                         <td style="background-color: #002136; color: #FFFFFF; padding: 1rem; ">
                             <a href="#">
-                                <img src="https://transmovi.s3.us-east-2.amazonaws.com/logos/transmovi.png" alt="logo"
+                                <img src="-----****-----****----" alt="logo"
                                     style="height: 95px;">
                             </a>
                         </td>
@@ -128,18 +129,18 @@ export class MailService {
 </html>
 
       `,
-    });
-  }
+        });
+    }
 
-  async sendResetPasswordEmail(to: string, name: string, token: string, codigo: string) {
-    const url = `https://transmovi.mx/transmoviDev/#/account/signup?token=${token}`;
-    // 👆 Este debe apuntar a tu frontend Angular (puedes ajustarlo a localhost:3000 si haces la prueba desde backend)
+    async sendResetPasswordEmail(to: string, name: string, token: string, codigo: string) {
+        const url = `https://transmovi.mx/transmoviDev/#/account/signup?token=${token}`;
+        // 👆 Este debe apuntar a tu frontend Angular (puedes ajustarlo a localhost:3000 si haces la prueba desde backend)
 
-    await this.transporter.sendMail({
-      from: ` <${process.env.E_MAIL}>`,
-      to,
-      subject: 'Restablecer Contraseña',
-      html: `
+        await this.transporter.sendMail({
+            from: ` <${process.env.E_MAIL}>`,
+            to,
+            subject: 'Restablecer Contraseña',
+            html: `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -218,6 +219,6 @@ export class MailService {
 </body>
 </html>
     `,
-    });
-  }
+        });
+    }
 }

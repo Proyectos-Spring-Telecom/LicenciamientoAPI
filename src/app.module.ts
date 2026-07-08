@@ -7,7 +7,6 @@ import { BitacoraModule } from './bitacora/bitacora.module';
 import { ModulosModule } from './modulos/modulos.module';
 import { PermisosModule } from './permisos/permisos.module';
 import { RolesModule } from './roles/roles.module';
-import { S3Module } from './s3/s3.module';
 import { MailModule } from './mail/mail.module';
 import Joi from 'joi';
 
@@ -23,11 +22,12 @@ import Joi from 'joi';
         DB_DATABASE: Joi.string().required(),
         JWT_SECRET: Joi.string().required(),
         JWT_EXPIRES_IN: Joi.string().required(),
-        AWS_REGION: Joi.string().required(),
-        AWS_ACCESS_KEY_ID: Joi.string().required(),
-        AWS_SECRET_ACCESS_KEY: Joi.string().required(),
-        AWS_S3_BUCKET: Joi.string().required(),
-        UPLOAD_MAX_SIZE: Joi.string().required(),
+        JWT_REFRESH_EXPIRES_IN: Joi.string().required(),
+        DB_TZ: Joi.string().allow(''),
+        HOST: Joi.string().allow(''),
+        SMTP: Joi.number().optional(),
+        E_MAIL: Joi.string().allow(''),
+        SMTP_PASS: Joi.string().allow(''),
       }),
     }),
 
@@ -45,7 +45,9 @@ import Joi from 'joi';
         entities: [__dirname + '/entities/*{.ts,.js}'],
         synchronize: false, //Nunca poner en true
         dateStrings: false,
-        timezone: 'Z',
+        timezone: config.get<string>('DB_TZ') || 'Z',
+        bigNumberStrings: false,
+        logging: true,
         extra: {
           // Evita que bigint se devuelvan como string
           decimalNumbers: true,
@@ -63,11 +65,9 @@ import Joi from 'joi';
 
     RolesModule,
 
-    S3Module,
-
     MailModule,
 
     ModulosModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

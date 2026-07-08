@@ -8,11 +8,14 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Bitacora } from './Bitacora';
+import { Grupos } from './Grupos';
+import { RefreshSessions } from './RefreshSessions';
 import { Roles } from './Roles';
 import { applySchema } from 'src/common/apply-schema.decorator';
 
 @applySchema
-@Index('FK_Usuarios_Roles', ['idRol'], {})
+@Index('IX_Usuarios_IdRol', ['idRol'], {})
+@Index('IX_Usuarios_IdGrupo', ['idGrupo'], {})
 @Entity('Usuarios')
 export class Usuarios {
   @PrimaryGeneratedColumn({ type: 'bigint', name: 'Id' })
@@ -97,10 +100,20 @@ export class Usuarios {
   @OneToMany(() => Bitacora, (bitacora) => bitacora.idUsuario2)
   bitacoras: Bitacora[];
 
+  @OneToMany(() => RefreshSessions, (refreshSession) => refreshSession.usuario)
+  refreshSessions: RefreshSessions[];
+
   @ManyToOne(() => Roles, (roles) => roles.usuarios, {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
   @JoinColumn([{ name: 'IdRol', referencedColumnName: 'id' }])
   idRol2: Roles;
+
+  @ManyToOne(() => Grupos, (grupos) => grupos.usuarios, {
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+  })
+  @JoinColumn([{ name: 'IdGrupo', referencedColumnName: 'id' }])
+  idGrupo2: Grupos;
 }

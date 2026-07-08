@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe} from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpStringResponseFilter } from './utils/http-string-response.filter';
 
@@ -16,9 +16,9 @@ async function bootstrap() {
   });
 
   const config = new DocumentBuilder()
-    .setTitle('Shift Control')
-    .setDescription('Documentación de la API de Shift Control') 
-    .setVersion('1.0') 
+    .setTitle('Licenciamiento')
+    .setDescription('Documentación de la API de Licenciamiento')
+    .setVersion('1.0')
     .addServer('http://localhost:3010', 'Servidor Local')
     .addBearerAuth(
       {
@@ -36,7 +36,6 @@ async function bootstrap() {
     .addTag('Mail', 'Servicio de correo electrónico')
     .addTag('Modulos', 'Gestión de módulos del sistema')
     .addTag('Permisos', 'Gestión de permisos')
-    .addTag('S3 - archivos', 'Carga de archivos a S3')
     .addTag('Usuarios', 'Gestión de usuarios')
     .build();
 
@@ -46,16 +45,16 @@ async function bootstrap() {
       persistAuthorization: true,
       defaultModelsExpandDepth: -1,
     },
-  }); 
-  
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,       
-      forbidNonWhitelisted: true, 
-      transform: true,      
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
-  
+
   await app.listen(process.env.PORT ?? 3010);
 }
 bootstrap();

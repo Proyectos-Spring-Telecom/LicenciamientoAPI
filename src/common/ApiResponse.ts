@@ -9,15 +9,6 @@ export interface Paginated {
   lastPage: number;
 }
 
-export interface ApiDerroteroResponse {
-  status: string;
-  message: string;
-  id: number;
-  nombre: string;
-  distancia: number;
-  estatus: number | string;
-}
-
 export interface ApiCrudResponse {
   status: string;
   message: string;
@@ -32,16 +23,6 @@ export interface ApiData {
 
 export interface ApiEstatus {
   estatus: number;
-}
-
-export interface Punto {
-  lat: number;
-  lng: number;
-}
-
-export interface ResultadoRecorrido {
-  recorridoDetallado: Punto[];
-  distanciaKm: number;
 }
 
 export enum EstatusEnumBitcora {

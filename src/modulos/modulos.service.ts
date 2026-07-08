@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   HttpException,
-  HttpStatus,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -9,262 +8,277 @@ import {
 import { CreateModuloDto } from './dto/create-modulo.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Modulos } from 'src/entities/Modulos';
-import { Repository } from 'typeorm';
+import { CatModulos } from 'src/entities/CatModulos';
 import { Permisos } from 'src/entities/Permisos';
+import { Repository } from 'typeorm';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
-import { UpdateModulosEstatusDto } from './dto/update-modulo-estatus.dto';
 import {
   ApiCrudResponse,
   ApiResponseCommon,
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
+import { EnumModulos } from 'src/common/estatus.enum';
 
 @Injectable()
 export class ModulosService {
   constructor(
+    @InjectRepository(CatModulos)
+    private readonly moduloRepository: Repository<CatModulos>,
     @InjectRepository(Permisos)
     private readonly permisosRepository: Repository<Permisos>,
-    @InjectRepository(Modulos)
-    private readonly moduloRepository: Repository<Modulos>,
     private readonly bitacoraLogger: BitacoraLoggerService,
-  ) {}
+  ) { }
+
+  private mapModuloPaginatedItem(modulo: CatModulos) {
+    return {
+      id: Number(modulo.id),
+      nombre: modulo.nombre,
+      estatus: modulo.estatus,
+    };
+  }
+
+  private mapModuloListItem(modulo: CatModulos) {
+    return {
+      id: Number(modulo.id),
+      nombre: modulo.nombre,
+    };
+  }
+
+  private mapModulo(modulo: CatModulos) {
+    return {
+      ...modulo,
+      id: Number(modulo.id),
+      permisos: (modulo.permisos ?? []).map((permiso) => ({
+        ...permiso,
+        id: Number(permiso.id),
+        idModulo: Number(permiso.idModulo),
+      })),
+    };
+  }
 
   async create(
     createModuloDto: CreateModuloDto,
     idUser: number,
   ): Promise<ApiCrudResponse> {
     try {
-      const modulos = await this.moduloRepository.findOne({
-        where: { nombre: createModuloDto.nombre },
+      const existente = await this.moduloRepository.findOne({
+        where: { nombre: createModuloDto.Nombre },
       });
-      if (modulos) {
+      if (existente) {
         throw new BadRequestException('El modulo ya existe');
       }
-      const create = await this.moduloRepository.create(createModuloDto);
-      const saved = await this.moduloRepository.save(create);
 
-      //-----Registro en la bitacora----- SUCCESS
+      const saved = await this.moduloRepository.save(
+        this.moduloRepository.create({
+          nombre: createModuloDto.Nombre,
+          estatus: 1,
+        }),
+      );
+
       const querylogger = { createModuloDto };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se creó un modulos con nombre: ${createModuloDto.nombre}`,
+        'CatModulos',
+        `Se creó un modulo con nombre: ${saved.nombre}`,
         'CREATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      const idMod = saved.id;
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'Modulo creado correctamente',
         data: {
-          id: Number(idMod),
-          nombre: `${saved.nombre} ${saved.descripcion} ` || '',
+          id: Number(saved.id),
+          nombre: saved.nombre,
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
       const querylogger = { createModuloDto };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se creó un modulos con nombre: ${createModuloDto.nombre}`,
+        'CatModulos',
+        `Se creó un modulo con nombre: ${createModuloDto.Nombre}`,
         'CREATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
         error.message,
       );
-      throw new BadRequestException(error);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al crear modulo');
     }
   }
 
-  async findAllList(): Promise<ApiResponseCommon> {
+  async findAllList(): Promise<{ id: number; nombre: string | null }[]> {
     try {
       const modulos = await this.moduloRepository.find({
-        relations: ['permisos'],
+        select: ['id', 'nombre'],
         where: { estatus: 1 },
+        order: { nombre: 'ASC' },
       });
-      // 🔥 Forzamos ids a number y agregamos nombreCompleto
-      const data = modulos.map((item) => ({
-        ...item,
-        id: Number(item.id),
-        permisos: item.permisos.map(permiso => ({
-          ...permiso,
-          id: Number(permiso.id),
-          idModulo: Number(permiso.idModulo),
-        }))
-      }));
-      const result: ApiResponseCommon = {
-        data: modulos,
-      };
-      return result;
+
+      return modulos.map((item) => this.mapModuloListItem(item));
     } catch (error) {
-      throw new BadRequestException(error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al obtener modulos');
     }
   }
 
   async findAll(page: number, limit: number): Promise<ApiResponseCommon> {
     try {
       const [data, total] = await this.moduloRepository.findAndCount({
-        relations: ['permisos'],
+        select: ['id', 'nombre', 'estatus'],
         skip: (page - 1) * limit,
         take: limit,
+        order: { id: 'DESC' },
       });
-      // 🔥 Forzamos ids a number y agregamos nombreCompleto
-      const modulos = data.map((item) => ({
-        ...item,
-        id: Number(item.id),
-        permisos: item.permisos.map(permiso => ({
-          ...permiso,
-          id: Number(permiso.id),
-          idModulo: Number(permiso.idModulo),
-        }))
-      }));
 
-      const result: ApiResponseCommon = {
-        data,
+      return {
+        data: data.map((item) => this.mapModuloPaginatedItem(item)),
         paginated: {
-          total: total,
+          total,
           page,
           lastPage: Math.ceil(total / limit),
         },
       };
-      return result;
     } catch (error) {
-      throw new BadRequestException(error.message || 'Error fetching data');
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al obtener modulos');
     }
   }
 
   async findOne(id: number) {
     try {
       const modulo = await this.moduloRepository.findOne({
-        where: { id: id },
+        where: { id },
         relations: ['permisos'],
       });
-      if (!modulo)      throw new NotFoundException({ message: 'Módulo no encontrado' });
+      if (!modulo) {
+        throw new NotFoundException({ message: 'Módulo no encontrado' });
+      }
 
-      return { data: modulo };
+      return { data: this.mapModulo(modulo) };
     } catch (error) {
-    if (error instanceof HttpException) throw error;
-
-    console.error('Error interno:', error);
-
-    throw new HttpException(
-      {
-        message: 'Error interno al buscar el módulo',
-        details: error.message,
-      },
-      HttpStatus.INTERNAL_SERVER_ERROR,
-    );
-  }
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al buscar el módulo');
+    }
   }
 
   async update(
-    id: number,
     updateModuloDto: UpdateModuloDto,
     idUser: number,
   ): Promise<ApiCrudResponse> {
     try {
-      const modulo = await this.moduloRepository.findOne({
-        where: { id: id },
+      const id = Number(updateModuloDto.Id);
+      const modulo = await this.moduloRepository.findOne({ where: { id } });
+      if (!modulo) {
+        throw new NotFoundException('Módulo no encontrado');
+      }
+
+      const duplicado = await this.moduloRepository.findOne({
+        where: { nombre: updateModuloDto.Nombre },
       });
-      if (!modulo) throw new NotFoundException('Módulo no encontrado');
-      await this.moduloRepository.update(id, updateModuloDto);
-      const moduloResult = await this.moduloRepository.findOne({
-        where: { id: id },
+      if (duplicado && Number(duplicado.id) !== id) {
+        throw new BadRequestException('El modulo ya existe');
+      }
+
+      await this.moduloRepository.update(id, {
+        nombre: updateModuloDto.Nombre,
       });
 
-      //-----Registro en la bitacora----- SUCCESS
       const querylogger = { updateModuloDto };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se creó un modulos con modulo: ${updateModuloDto.nombre}`,
+        'CatModulos',
+        `Se actualizo el modulo: ${updateModuloDto.Nombre}`,
         'UPDATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'Modulo actualizado correctamente',
         data: {
-          id: id,
-          nombre: `${moduloResult?.nombre} ${moduloResult?.descripcion} ` || '',
+          id,
+          nombre: updateModuloDto.Nombre,
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
       const querylogger = { updateModuloDto };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se creó un modulos con modulo: ${updateModuloDto.nombre}`,
+        'CatModulos',
+        `Se actualizo el modulo con ID: ${updateModuloDto.Id}`,
         'UPDATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
         error.message,
       );
-      throw new BadRequestException(error);
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al actualizar modulo');
     }
   }
 
   async updateModulosStatus(
     id: number,
     idUser: number,
-    updateModulosEstatusDto: UpdateModulosEstatusDto,
   ): Promise<ApiCrudResponse> {
     try {
-      const modulo = await this.moduloRepository.findOne({ where: { id: id } });
+      const modulo = await this.moduloRepository.findOne({ where: { id } });
       if (!modulo) {
         throw new NotFoundException('Modulo no encontrado');
       }
-      const estatus = updateModulosEstatusDto.estatus;
-      await this.moduloRepository.update(id, { estatus: estatus });
 
-      //-----Registro en la bitacora----- SUCCESS
-      const querylogger = { updateModulosEstatusDto };
+      const estatus = modulo.estatus === 1 ? 0 : 1;
+      await this.moduloRepository.update(id, { estatus });
+      await this.permisosRepository.update({ idModulo: id }, { estatus });
+
+      const querylogger = { id, estatus };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se actualizo el modulo con ID: ${id} a estatus: ${estatus}`,
+        'CatModulos',
+        `Se actualizo el modulo con ID: ${id} a estatus: ${estatus} y sus permisos relacionados`,
         'UPDATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'Estatus modulo actualizado correctamente',
-        estatus: { estatus: estatus },
+        estatus: { estatus },
         data: {
-          id: id,
-          nombre: `${modulo.nombre} ${modulo.descripcion} ` || '',
+          id,
+          nombre: modulo.nombre,
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
-      const querylogger = { updateModulosEstatusDto };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se actualizo el modulo con ID: ${id} a estatus: ${updateModulosEstatusDto.estatus}`,
+        'CatModulos',
+        `Se actualizo el modulo con ID: ${id}`,
         'UPDATE',
         querylogger,
         idUser,
-        5,
+        EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
         error.message,
       );
@@ -273,82 +287,8 @@ export class ModulosService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error al cambiar estatus del modulos con id: ${id}`,
+        `Error al cambiar estatus del modulo con id: ${id}`,
       );
-    }
-  }
-
-  async deleteModulo(id: number, idUser: number): Promise<ApiCrudResponse> {
-    try {
-      const modulo = await this.moduloRepository.findOne({ where: { id: id } });
-  
-      if (!modulo) throw new NotFoundException('Modulo no encontrado');
-      if (modulo.estatus === 1) {
-        modulo.estatus = 0;
-        await this.moduloRepository.update(id, modulo);
-  
-        const permisos = await this.permisosRepository.find({
-          where: { id: id },
-        });
-        if (permisos.length > 0) {
-          for (const permiso of permisos) {
-            permiso.estatus = 0;
-            await this.permisosRepository.update(permiso.id, permiso);
-          }
-        }
-      } else {
-        modulo.estatus = 1;
-        await this.moduloRepository.update(id, modulo);
-        const permisos = await this.permisosRepository.find({
-          where: { idModulo: id },
-        });
-        if (permisos.length > 0) {
-          for (const permiso of permisos) {
-            permiso.estatus = 1;
-            await this.permisosRepository.update(permiso.id, permiso);
-          }
-        }
-      }
-  
-      //-----Registro en la bitacora----- SUCCESS
-      const querylogger = { id: id, estatus: 0 };
-      await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se eliminó el modulos con ID: ${id}`,
-        'UPDATE',
-        querylogger,
-        Number(idUser),
-        5,
-        EstatusEnumBitcora.SUCCESS,
-      );
-      
-      //Api response
-      const result: ApiCrudResponse = {
-        status: 'success',
-        message: 'Modulo eliminado correctamente',
-        data: {
-          id: id,
-          nombre: `${modulo.nombre} ${modulo.descripcion} ` || '',
-        },
-      };
-      return result;
-    } catch (error) {
-      //-----Registro en la bitacora----- ERROR
-      const querylogger = { id: id, estatus: 0 };
-      await this.bitacoraLogger.logToBitacora(
-        'Modulos',
-        `Se eliminó el modulos con ID: ${id}`,
-        'UPDATE',
-        querylogger,
-        Number(idUser),
-        5,
-        EstatusEnumBitcora.ERROR,
-        error.message,
-      );
-      throw new InternalServerErrorException({
-        message: 'Error al eliminar modulos.',
-        error: error.message,
-      });
     }
   }
 }

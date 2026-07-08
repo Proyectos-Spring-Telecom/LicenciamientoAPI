@@ -1,10 +1,8 @@
 
 import {
-  IsArray,
-  IsDateString,
+  IsEmail,
   IsIn,
   IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
@@ -19,11 +17,21 @@ export class UpdateUsuarioDto {
     description: 'Confirmación de email (0=No, 1=Sí)',
     example: 0,
   })
-  emailConfirmado?: number;
+  emailConfirmed?: number;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(191)
+  @ApiProperty({
+    description: 'Correo electrónico',
+    example: 'usuario@ejemplo.com',
+    required: false,
+  })
+  email?: string;
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Nombre del usuario',
     example: 'Juan',
@@ -33,7 +41,7 @@ export class UpdateUsuarioDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Apellido paterno',
     example: 'Pérez',
@@ -43,7 +51,7 @@ export class UpdateUsuarioDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Apellido materno',
     example: 'López',
@@ -53,23 +61,12 @@ export class UpdateUsuarioDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(14)
   @ApiProperty({
     description: 'Teléfono',
     example: '5512345678',
     required: false,
   })
-  telefono?: string;
-
-  @IsOptional()
-  @IsDateString()
-  @ApiProperty({ description: 'Actualización de contraseña', required: false })
-  actualizacionPassword?: string;
-
-  @IsOptional()
-  @IsString()
-  @ApiProperty({ description: 'Foto de perfil', required: false })
-  fotoPerfil?: string;
+  phoneNumber?: string;
 
   @IsOptional()
   @IsInt()
@@ -87,11 +84,6 @@ export class UpdateUsuarioDto {
 
   @IsOptional()
   @IsInt()
-  @ApiProperty({ description: 'Cliente asignado', example: 5 })
-  idCliente?: number;
-
-  @IsOptional()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  permisosIds?: number[];
+  @ApiProperty({ description: 'Grupo asignado', example: 5 })
+  idGrupo?: number;
 }

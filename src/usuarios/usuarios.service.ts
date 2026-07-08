@@ -19,189 +19,120 @@ import {
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
-import { ClientesService } from 'src/clientes/clientes.service';
-import { UsuariosPermisos } from 'src/entities/UsuariosPermisos';
 import { UpdateUsuarioContrasena } from './dto/update-usuario-contrasena.dto';
 import { MailService } from 'src/mail/mail.service';
 import { JwtService } from '@nestjs/jwt';
-import { Clientes } from 'src/entities/Clientes';
 import { EnumModulos, EstatusEnum } from 'src/common/estatus.enum';
+import { AuthService } from 'src/auth/auth.service';
 
 @Injectable()
 export class UsuariosService {
+  private readonly usuarioSelect = `
+SELECT
+  u.Id AS Id,
+  u.UserName AS UserName,
+  u.Email AS Email,
+  u.Nombre AS Nombre,
+  u.ApellidoPaterno AS ApellidoPaterno,
+  u.ApellidoMaterno AS ApellidoMaterno,
+  u.PhoneNumber AS PhoneNumber,
+  u.FechaCreacion AS FechaCreacion,
+  u.FechaActualizacion AS FechaActualizacion,
+  u.Estatus AS estatus,
+  u.IdRol AS IdRol,
+  r.Nombre AS RolNombre,
+  r.Descripcion AS RolDescripcion,
+  u.IdGrupo AS IdGrupo
+FROM Usuarios u
+INNER JOIN Roles r ON u.IdRol = r.Id`;
+
+  private readonly usuarioSelectById = `
+SELECT
+  u.Id AS id,
+  u.UserName AS userName,
+  u.Email AS email,
+  u.Nombre AS nombre,
+  u.ApellidoPaterno AS apellidoPaterno,
+  u.ApellidoMaterno AS apellidoMaterno,
+  u.PhoneNumber AS phoneNumber,
+  u.FechaCreacion AS fechaCreacion,
+  u.FechaActualizacion AS fechaActualizacion,
+  u.Estatus AS estatus,
+  u.IdRol AS idRol,
+  r.Nombre AS rolNombre,
+  r.Descripcion AS rolDescripcion,
+  u.IdGrupo AS idGrupo
+FROM Usuarios u
+INNER JOIN Roles r ON u.IdRol = r.Id`;
+
   constructor(
     @InjectRepository(Usuarios)
     private readonly usuarioRepository: Repository<Usuarios>,
     private readonly bitacoraLogger: BitacoraLoggerService,
-    private readonly clientesService: ClientesService,
-    @InjectRepository(UsuariosPermisos)
-    private usuariosPermisosRepository: Repository<UsuariosPermisos>,
-    @InjectRepository(Clientes)
-    private readonly clienteRepository: Repository<Clientes>,
     private readonly emailService: MailService,
     private readonly jwtService: JwtService,
-  ) { }
+    private readonly authService: AuthService,
+  ) {}
 
-  //funcion para obtener los clientes hijos
-  private async clienteHijos(cliente: number) {
-    const clientesFiltrado = await this.clienteRepository.query(
-      `CALL spGetClientes(?);`,
-      [cliente],
-    );
-
-    const idsFiltrados = clientesFiltrado[0]; // El primer índice contiene los resultados
-    const ids = idsFiltrados
-      .map((clientesFiltrado: any) => Number(clientesFiltrado.Id))
-      .filter(Boolean);
-    if (ids.length === 0) {
-      return { data: [] }; // No hay clientes que consultar
-    }
-
-    // 3. Construir el query dinámico con los IDs
-    const placeholders = ids.map(() => '?').join(', ');
-    return { ids, placeholders };
+  private mapUsuario(item: Record<string, unknown>) {
+    return {
+      ...item,
+      Id: Number(item.Id),
+      IdRol: Number(item.IdRol),
+      IdGrupo: item.IdGrupo != null ? Number(item.IdGrupo) : null,
+    };
   }
 
-  // ========================================
-  // 🔹 OBTENER USUARIOS POR PAGINACIÓN
-  // ========================================
   async getAllUsuario(
     idUser: number,
-    cliente: number,
+    idGrupo: number,
     rol: number,
     page: number,
     limit: number,
   ): Promise<ApiResponseCommon> {
     try {
-      let usuarios;
       const offset = (page - 1) * limit;
+      let usuarios;
       let totalResult;
 
-      switch (rol) {
-        case 1:
-          // Consulta de datos paginados Usuario SuperAdministrador
-          usuarios = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS Id,
-  u.UserName AS UserName,
-  u.Nombre AS Nombre,
-  u.ApellidoPaterno AS ApellidoPaterno,
-  u.ApellidoMaterno AS ApellidoMaterno,
-  u.Telefono AS Telefono,
-  u.UltimoLogin AS UltimoLogin,
-  u.FotoPerfil AS FotoPerfil,
-  u.FechaCreacion AS FechaCreacion,
-  u.FechaActualizacion AS FechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS IdRol,
-  -- Datos del Rol
-  r.Nombre AS RolNombre,
-  r.Descripcion AS RolDescripcion,
-  u.IdCliente AS IdCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS ApellidoPaternoCliente,
-  c.ApellidoMaterno AS ApellidoMaternoCliente,
-  c.Estatus AS EstatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
-
+      if (rol === 1) {
+        usuarios = await this.usuarioRepository.query(
+          `${this.usuarioSelect}
 ORDER BY u.Id DESC
-LIMIT ? OFFSET ?;
-        `,
-            [limit, offset],
-          );
+LIMIT ? OFFSET ?;`,
+          [limit, offset],
+        );
 
-          // Query para total (sin paginación)
-          totalResult = await this.usuarioRepository.query(
-            `
-  SELECT COUNT(*) AS total
-  FROM Usuarios u
-  INNER JOIN Clientes c ON u.IdCliente = c.Id
-
-  `,
-          );
-          break;
-
-        default:
-          const { ids, placeholders } = await this.clienteHijos(cliente);
-          // Consulta de datos paginados resto Usuario
-          usuarios = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS Id,
-  u.UserName AS UserName,
-  u.Nombre AS Nombre,
-  u.ApellidoPaterno AS ApellidoPaterno,
-  u.ApellidoMaterno AS ApellidoMaterno,
-  u.Telefono AS Telefono,
-  u.UltimoLogin AS UltimoLogin,
-  u.FotoPerfil AS FotoPerfil,
-  u.FechaCreacion AS FechaCreacion,
-  u.FechaActualizacion AS FechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS IdRol,
-  -- Datos del Rol
-  r.Nombre AS RolNombre,
-  r.Descripcion AS RolDescripcion,
-  u.IdCliente AS IdCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS ApellidoPaternoCliente,
-  c.ApellidoMaterno AS ApellidoMaternoCliente,
-  c.Estatus AS EstatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
-WHERE c.Id IN (${placeholders})   -- 🔹 aquí colocas el ID del cliente que quieres consultar
-AND u.Estatus = 1
-AND u.Id != ?
+        totalResult = await this.usuarioRepository.query(
+          `SELECT COUNT(*) AS total FROM Usuarios u`,
+        );
+      } else {
+        usuarios = await this.usuarioRepository.query(
+          `${this.usuarioSelect}
+WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?
 ORDER BY u.Id DESC
-LIMIT ? OFFSET ?;
-        `,
-            [...ids, idUser, limit, offset],
-          );
+LIMIT ? OFFSET ?;`,
+          [idGrupo, idUser, limit, offset],
+        );
 
-          // Query para total (sin paginación)
-          totalResult = await this.usuarioRepository.query(
-            `
-  SELECT COUNT(*) AS total
-  FROM Usuarios u
-  INNER JOIN Clientes c ON u.IdCliente = c.Id
-	WHERE c.Id IN (${placeholders})   -- 🔹 aquí colocas el ID del cliente que quieres consultar
-AND u.Estatus = 1
-AND u.Id != ? 
-  `,
-            [...ids, idUser],
-          );
-          break;
+        totalResult = await this.usuarioRepository.query(
+          `SELECT COUNT(*) AS total
+FROM Usuarios u
+WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?`,
+          [idGrupo, idUser],
+        );
       }
 
       const total = Number(totalResult[0]?.total || 0);
 
-      const data = usuarios.map((item) => ({
-        ...item,
-        Id: Number(item.Id),
-        IdRol: Number(item.IdRol),
-        IdCliente: Number(item.IdCliente),
-      }));
-
-      const result: ApiResponseCommon = {
-        data: data,
+      return {
+        data: usuarios.map((item) => this.mapUsuario(item)),
         paginated: {
-          total: total,
+          total,
           page,
           lastPage: Math.ceil(total / limit),
         },
       };
-
-      return result;
     } catch (error) {
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al obtener la paginación de usuarios.',
@@ -210,108 +141,31 @@ AND u.Id != ?
     }
   }
 
-  //Obtener todos los usuarios
-    // ========================================
-  // 🔹 OBTENER LISTADO DE USUARIOS
-  // ========================================
   async getAllListUsuarios(
-    cliente: number,
+    idGrupo: number,
     rol: number,
   ): Promise<ApiResponseCommon> {
     try {
       let usuarios;
 
-      switch (rol) {
-        case 1:
-          // Consulta de datos listado Usuario SuperAdministrador
-          usuarios = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS Id,
-  u.UserName AS UserName,
-  u.Nombre AS Nombre,
-  u.ApellidoPaterno AS ApellidoPaterno,
-  u.ApellidoMaterno AS ApellidoMaterno,
-  u.Telefono AS Telefono,
-  u.UltimoLogin AS UltimoLogin,
-  u.FotoPerfil AS FotoPerfil,
-  u.FechaCreacion AS FechaCreacion,
-  u.FechaActualizacion AS FechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS IdRol,
-  -- Datos del Rol
-  r.Nombre AS RolNombre,
-  r.Descripcion AS RolDescripcion,
-  u.IdCliente AS IdCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS ApellidoPaternoCliente,
-  c.ApellidoMaterno AS ApellidoMaternoCliente,
-  c.Estatus AS EstatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
+      if (rol === 1) {
+        usuarios = await this.usuarioRepository.query(
+          `${this.usuarioSelect}
 WHERE u.Estatus = 1
-ORDER BY u.Id DESC;
-        `,
-          );
-          break;
-
-        default:
-          // Consulta de datos listado resto Usuario
-          const { ids, placeholders } = await this.clienteHijos(cliente);
-          usuarios = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS Id,
-  u.UserName AS UserName,
-  u.Nombre AS Nombre,
-  u.ApellidoPaterno AS ApellidoPaterno,
-  u.ApellidoMaterno AS ApellidoMaterno,
-  u.Telefono AS Telefono,
-  u.UltimoLogin AS UltimoLogin,
-  u.FotoPerfil AS FotoPerfil,
-  u.FechaCreacion AS FechaCreacion,
-  u.FechaActualizacion AS FechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS IdRol,
-  -- Datos del Rol
-  r.Nombre AS RolNombre,
-  r.Descripcion AS RolDescripcion,
-  u.IdCliente AS IdCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS ApellidoPaternoCliente,
-  c.ApellidoMaterno AS ApellidoMaternoCliente,
-  c.Estatus AS EstatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
-WHERE c.Id IN (${placeholders})   -- 🔹 aquí colocas el ID del cliente que quieres consultar
-AND u.Estatus = 1
-ORDER BY u.Id DESC;
-        `,
-            [...ids],
-          );
-
-          break;
+ORDER BY u.Id DESC;`,
+        );
+      } else {
+        usuarios = await this.usuarioRepository.query(
+          `${this.usuarioSelect}
+WHERE u.IdGrupo = ? AND u.Estatus = 1
+ORDER BY u.Id DESC;`,
+          [idGrupo],
+        );
       }
 
-      const data = usuarios.map((item) => ({
-        ...item,
-        Id: Number(item.Id),
-        IdRol: Number(item.IdRol),
-        IdCliente: Number(item.IdCliente),
-      }));
-
-      const result: ApiResponseCommon = {
-        data: data,
+      return {
+        data: usuarios.map((item) => this.mapUsuario(item)),
       };
-      return result;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -323,146 +177,75 @@ ORDER BY u.Id DESC;
     }
   }
 
-  // ========================================
-  // 🔹 OBTENER LISTADO DE USUARIOS POR CLIENTE
-  // ========================================
-  async getAllListUsuariosCliente(
-    id: number,
-    cliente: number,
-  ): Promise<ApiResponseCommon> {
+  async getAllListUsuariosGrupo(idGrupo: number): Promise<ApiResponseCommon> {
     try {
       const usuarios = await this.usuarioRepository.find({
-        where: { estatus: 1, idCliente: cliente },
+        where: { estatus: 1, idGrupo },
       });
+
       if (usuarios.length === 0) {
         throw new NotFoundException('No se encontraron usuarios.');
       }
+
       const usuariosSinPassword = usuarios.map(
         ({ passwordHash, ...rest }) => rest,
       );
-      const result: ApiResponseCommon = {
-        data: usuariosSinPassword,
-      };
-      return result;
+
+      return { data: usuariosSinPassword };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
         message:
-          'Se produjo un error al intentar obtener los usuarios asociados al cliente.',
+          'Se produjo un error al intentar obtener los usuarios asociados al grupo.',
         error: error.message,
       });
     }
   }
 
-  //Obtener el usuario por ID
-  // ========================================
-  // 🔹 OBTENER USUARIOS POR ID
-  // ========================================
-  async getUsuarioByID(id: number, cliente: number, rol: number) {
+  async getUsuarioByID(id: number, idGrupo: number, rol: number) {
     try {
       let usuarioData;
 
-      switch (rol) {
-        case 1:
-          // Consulta de datos listado Usuario SuperAdministrador
-          usuarioData = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS id,
-  u.UserName AS userName,
-  u.Nombre AS nombre,
-  u.ApellidoPaterno AS apellidoPaterno,
-  u.ApellidoMaterno AS apellidoMaterno,
-  u.Telefono AS telefono,
-  u.UltimoLogin AS ultimoLogin,
-  u.FotoPerfil AS fotoPerfil,
-  u.FechaCreacion AS fechaCreacion,
-  u.FechaActualizacion AS fechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS idRol,
-  -- Datos del rol
-  r.Nombre AS rolNombre,
-  r.Descripcion AS rolDescripcion,
-  u.IdCliente AS idCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS apellidoPaternoCliente,
-  c.ApellidoMaterno AS apellidoMaternoCliente,
-  c.Estatus AS estatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
+      if (rol === 1) {
+        usuarioData = await this.usuarioRepository.query(
+          `${this.usuarioSelectById}
 WHERE u.Id = ?
-ORDER BY u.Id DESC
-        `,
-            [id],
-          );
-          break;
-
-        default:
-          // Consulta de datos paginados resto Usuario
-          const { ids, placeholders } = await this.clienteHijos(cliente);
-          usuarioData = await this.usuarioRepository.query(
-            `
-SELECT
-  -- Datos del Usuario
-  u.Id AS id,
-  u.UserName AS userName,
-  u.Nombre AS nombre,
-  u.ApellidoPaterno AS apellidoPaterno,
-  u.ApellidoMaterno AS apellidoMaterno,
-  u.Telefono AS telefono,
-  u.UltimoLogin AS ultimoLogin,
-  u.FotoPerfil AS fotoPerfil,
-  u.FechaCreacion AS fechaCreacion,
-  u.FechaActualizacion AS fechaActualizacion,
-  u.Estatus AS estatus,
-  u.IdRol AS idRol,
-  -- Datos del rol
-  r.Nombre AS rolNombre,
-  r.Descripcion AS rolDescripcion,
-  u.IdCliente AS idCliente,
-  -- Datos del Cliente
-  c.Nombre AS clienteNombre,
-  c.ApellidoPaterno AS apellidoPaternoCliente,
-  c.ApellidoMaterno AS apellidoMaternoCliente,
-  c.Estatus AS estatusCliente
-
-FROM Usuarios u
-INNER JOIN Roles r ON u.IdRol = r.Id
-LEFT JOIN Clientes c ON u.IdCliente = c.Id
-WHERE u.Id = ?
-AND c.Id IN (${placeholders})   -- 🔹 aquí colocas el ID del cliente que quieres consultar
-AND u.Estatus = 1
-ORDER BY u.Id DESC
-        `,
-            [id, ...ids],
-          );
-          break;
+ORDER BY u.Id DESC`,
+          [id],
+        );
+      } else {
+        usuarioData = await this.usuarioRepository.query(
+          `${this.usuarioSelectById}
+WHERE u.Id = ? AND u.IdGrupo = ? AND u.Estatus = 1
+ORDER BY u.Id DESC`,
+          [id, idGrupo],
+        );
       }
 
       if (usuarioData.length === 0) {
         throw new NotFoundException('Usuario no encontrado.');
       }
+
       const usuario = usuarioData.map((item) => ({
         ...item,
         id: Number(item.id),
         idRol: Number(item.idRol),
-        idCliente: Number(item.idCliente),
+        idGrupo: item.idGrupo != null ? Number(item.idGrupo) : null,
       }));
 
-      const permisoData = await this.usuariosPermisosRepository.find({
-        where: { idUsuario: id, estatus: 1 },
-      });
+      const permisoRows = usuario[0].idRol
+        ? await this.usuarioRepository.query(
+            `SELECT rp.IdPermiso AS idPermiso
+             FROM RolesPermisos rp
+             INNER JOIN Permisos p ON p.Id = rp.IdPermiso
+             WHERE rp.IdRol = ? AND p.Estatus = 1`,
+            [usuario[0].idRol],
+          )
+        : [];
 
-      const permiso = permisoData.map((item) => ({
-        ...item,
-        id: Number(item.id),
-        idUsuario: Number(item.idUsuario),
+      const permiso = permisoRows.map((item: { idPermiso: number }) => ({
         idPermiso: Number(item.idPermiso),
       }));
 
@@ -478,16 +261,12 @@ ORDER BY u.Id DESC
     }
   }
 
-  // ========================================
-  // 🔹 CREACION DE USUARIOS
-  // ========================================
   async createUsuario(
     createUsuarioDto: CreateUsuarioDto,
     idUser: string,
   ): Promise<ApiCrudResponse> {
     try {
       const existUsuario = await this.usuarioRepository.findOne({
-        //Buscamos si existe usuario
         where: { userName: createUsuarioDto.userName },
       });
       if (existUsuario) {
@@ -497,46 +276,17 @@ ORDER BY u.Id DESC
       const hashedPassword = await bcrypt.hash(
         createUsuarioDto.passwordHash,
         10,
-      ); //encriptamos la contraseña
+      );
       createUsuarioDto.passwordHash = hashedPassword;
 
-      const newUser = await this.usuarioRepository.create(createUsuarioDto);
+      const newUser = this.usuarioRepository.create({
+        ...createUsuarioDto,
+        emailConfirmed: createUsuarioDto.emailConfirmed ?? 1,
+        estatus: createUsuarioDto.estatus ?? 1,
+      });
 
-      //Activamos su ingreso
-      newUser.emailConfirmado = 1;
-      newUser.estatus = 1;
+      const userSave = await this.usuarioRepository.save(newUser);
 
-      const userSave = await this.usuarioRepository.save(newUser); //creamos el usuario
-
-      if (createUsuarioDto.permisosIds.length > 0) {
-        const usuariosPermisos = createUsuarioDto.permisosIds.map((permisoId) =>
-          this.usuariosPermisosRepository.create({
-            idUsuario: userSave.id,
-            idPermiso: permisoId,
-          }),
-        );
-
-        await this.usuariosPermisosRepository.save(usuariosPermisos);
-      }
-
-      const payload = {
-        id: userSave.id,
-        email: userSave.userName,
-      };
-
-      //datos del correo
-      /*       const token = this.jwtService.sign(payload, {
-              expiresIn: `${process.env.JWT_CONFIRMACION}`,
-            });
-            //Enviar correo de confirmacion
-            const name = `${userSave.nombre} ${userSave.apellidoPaterno} ${userSave.apellidoMaterno??''}`;
-            await this.emailService.sendConfirmationEmail(
-              userSave.userName,
-              name,
-              token,
-            ); */
-
-      //-----Registro en la bitacora----- SUCCESS
       const querylogger = { createUsuarioDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -548,10 +298,9 @@ ORDER BY u.Id DESC
         EstatusEnumBitcora.SUCCESS,
       );
 
-      const { passwordHash: _, ...usuarioSinPassword } = newUser;
+      const { passwordHash: _, ...usuarioSinPassword } = userSave;
 
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'Usuario creado correctamente',
         data: {
@@ -561,9 +310,7 @@ ORDER BY u.Id DESC
             '',
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- SUCCESS
       const querylogger = { createUsuarioDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -585,9 +332,6 @@ ORDER BY u.Id DESC
     }
   }
 
-  // ========================================
-  // 🔹 ACTUALIZAR CONTRASEÑA DEL USUARIO
-  // ========================================
   async updateContrasena(
     id: number,
     idUser: string,
@@ -595,58 +339,43 @@ ORDER BY u.Id DESC
   ) {
     try {
       const usuario = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!usuario) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
+
       if (
-        updateUsuarioContrasena.passwordNueva ===
+        updateUsuarioContrasena.passwordNueva !==
         updateUsuarioContrasena.passwordNuevaConfirmacion
       ) {
-        if (
-          !usuario ||
-          !(await bcrypt.compare(
-            updateUsuarioContrasena.passwordActual,
-            usuario.passwordHash,
-          ))
-        ) {
-          console.log({
-            user: usuario,
-            message: 'Entré a verificar los valores y no son iguales.',
-          });
-          throw new BadRequestException('Credenciales inválidas.');
-        }
-        const hashedPassword = await bcrypt.hash(
-          updateUsuarioContrasena.passwordNueva,
-          10,
-        ); //encriptamos la contraseña
-        updateUsuarioContrasena.passwordNueva = hashedPassword;
-      } else {
-        throw new BadRequestException('Las nuevas contraseñas no coinciden. Por favor, verifique la información ingresada e intente nuevamente.')
-      }
-      //Agregamos le fecha de la actualizacion
-      function pad(n: number) {
-        return n < 10 ? '0' + n : n;
+        throw new BadRequestException(
+          'Las nuevas contraseñas no coinciden. Por favor, verifique la información ingresada e intente nuevamente.',
+        );
       }
 
-      const ahora = new Date();
-      const desfaseMs = -6 * 60 * 60 * 1000; // -6 horas en milisegundos
-      const fechaDesfasada = new Date(ahora.getTime() + desfaseMs);
+      if (
+        !usuario.passwordHash ||
+        !(await bcrypt.compare(
+          updateUsuarioContrasena.passwordActual,
+          usuario.passwordHash,
+        ))
+      ) {
+        throw new BadRequestException('Credenciales inválidas.');
+      }
 
-      const fechaActual = `${fechaDesfasada.getFullYear()}-${pad(fechaDesfasada.getMonth() + 1)}-${pad(fechaDesfasada.getDate())} ${pad(fechaDesfasada.getHours())}:${pad(fechaDesfasada.getMinutes())}:${pad(fechaDesfasada.getSeconds())}`;
+      const hashedPassword = await bcrypt.hash(
+        updateUsuarioContrasena.passwordNueva,
+        10,
+      );
 
-      //actualiza en usuario contraseña
       await this.usuarioRepository.update(id, {
-        passwordHash: updateUsuarioContrasena.passwordNueva,
+        passwordHash: hashedPassword,
       });
 
-      await this.usuarioRepository.update(id, {
-        actualizacionPassword: fechaActual,
-      });
+      await this.authService.revokeAllRefreshSessionsForUser(id);
 
-      //-----Registro en la bitacora----- SUCCESS
-      const querylogger = { id: id };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
         `Se ha actualizado la contraseña del usuario con ID: ${id}.`,
@@ -657,22 +386,19 @@ ORDER BY u.Id DESC
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'La contraseña ha sido actualizada correctamente.',
         data: {
-          id: id,
+          id,
           nombre: `${usuario.nombre} ${usuario.apellidoPaterno} ` || '',
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
-      const querylogger = { id: id };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
-        `SSe ha actualizado la contraseña del usuario con ID: ${id}.`,
+        `Se ha actualizado la contraseña del usuario con ID: ${id}.`,
         'UPDATE',
         querylogger,
         Number(idUser),
@@ -690,10 +416,6 @@ ORDER BY u.Id DESC
     }
   }
 
-  //Actualizar usuario
-  // ========================================
-  // 🔹 ACTUALIZAR DATOS DEL USUARIO
-  // ========================================
   async updateUsuario(
     id: number,
     updateUsuarioDto: UpdateUsuarioDto,
@@ -701,100 +423,25 @@ ORDER BY u.Id DESC
   ): Promise<ApiCrudResponse> {
     try {
       const usuario = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!usuario) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
 
-      if (updateUsuarioDto.idCliente) {
-        const cliente = await this.clientesService.getOneCliente(
-          Number(updateUsuarioDto.idCliente),
-        );
-        if (!cliente)
-          throw new BadRequestException(
-            'No se encontró el cliente especificado.',
-          );
-      }
-      updateUsuarioDto.emailConfirmado = EstatusEnum.ACTIVO;
+      updateUsuarioDto.emailConfirmed = EstatusEnum.ACTIVO;
 
-      const { permisosIds, ...usuarioUpdate } = updateUsuarioDto;
-      // ----- ACTUALIZACIÓN DE USUARIO -----
-      await this.usuarioRepository.update(id, usuarioUpdate);
+      await this.usuarioRepository.update(id, updateUsuarioDto);
+
       const newUser = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!newUser) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
+
       const { passwordHash: _, ...usuarioSinPassword } = newUser;
 
-      // ----- ACTUALIZACIÓN DE PERMISOS -----
-      if (
-        updateUsuarioDto.permisosIds &&
-        Array.isArray(updateUsuarioDto.permisosIds)
-      ) {
-        const nuevaLista: number[] = updateUsuarioDto.permisosIds.map(Number); // lista nueva de permisos (ej. [1,EnumModulos.USUARIOS,3])
-
-        // Permisos actuales en BD
-        const creadaLista = await this.usuariosPermisosRepository.find({
-          where: { idUsuario: id },
-        });
-
-        const nuevaSet = new Set<number>(nuevaLista);
-        const creadaMap = new Map<number, any>(
-          creadaLista.map((p) => [Number(p.idPermiso), p] as const),
-        );
-        // Unimos todos los ids (de la nueva lista y de la creada)
-        const todosIds = new Set<number>([
-          ...nuevaSet,
-          ...creadaLista.map((p) => Number(p.idPermiso)),
-        ]);
-
-        for (const permisoId of todosIds) {
-          const enNueva = nuevaSet.has(permisoId);
-          const creado = creadaMap.get(permisoId);
-          if (enNueva && creado) {
-            if (creado.estatus === 0) {
-              // Caso: existe en ambas y en creada estatus=0 → activar
-              await this.usuariosPermisosRepository.update(creado.id, {
-                estatus: 1,
-              });
-            } else {
-              // Caso: existe en ambas y ya está activo → no hacer nada
-              continue;
-            }
-          } else if (enNueva && !creado) {
-            // Caso: existe en nueva pero no en creada → crear
-
-            const existe = await this.usuariosPermisosRepository.findOne({
-              where: { idUsuario: id, idPermiso: permisoId },
-            });
-            if (!existe) {
-              await this.usuariosPermisosRepository.save({
-                idUsuario: id,
-                idPermiso: permisoId,
-                estatus: 1,
-              });
-            }
-          } else if (!enNueva && creado) {
-            if (creado.estatus === 1) {
-              // Caso: no está en nueva pero sí en creada activo → desactivar
-              await this.usuariosPermisosRepository.update(creado.id, {
-                estatus: 0,
-              });
-            } else {
-              // Caso: ya estaba inactivo → nada que hacer
-              continue;
-            }
-          } else {
-            // Caso: no existe ni en nueva ni en creada → nada que hacer
-            continue;
-          }
-        }
-      }
-
-      // ----- Registro en la bitácora ----- SUCCESS
       const querylogger = { updateUsuarioDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -806,20 +453,17 @@ ORDER BY u.Id DESC
         EstatusEnumBitcora.SUCCESS,
       );
 
-      // ----- Api response -----
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'El usuario ha sido actualizado correctamente.',
         data: {
-          id: id,
+          id,
           nombre:
             `${usuarioSinPassword.nombre} ${usuarioSinPassword.apellidoPaterno} ` ||
             '',
         },
       };
-      return result;
     } catch (error) {
-      // ----- Registro en la bitácora ----- ERROR
       const querylogger = { updateUsuarioDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -842,9 +486,6 @@ ORDER BY u.Id DESC
     }
   }
 
-  // ========================================
-  // 🔹 ACTUALIZAR ESTATUS DEL USUARIO
-  // ========================================
   async updateUsuarioEstatus(
     id: number,
     updateUsuarioEstatusDto: UpdateUsuarioEstatusDto,
@@ -852,21 +493,22 @@ ORDER BY u.Id DESC
   ): Promise<ApiCrudResponse> {
     try {
       const usuario = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!usuario) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
-      const { estatus } = updateUsuarioEstatusDto;
 
-      await this.usuarioRepository.update(id, { estatus: estatus });
+      const { estatus } = updateUsuarioEstatusDto;
+      await this.usuarioRepository.update(id, { estatus });
+
       const usuarioResult = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!usuarioResult) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
-      //-----Registro en la bitacora----- SUCCESS
+
       const querylogger = { updateUsuarioEstatusDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -878,22 +520,17 @@ ORDER BY u.Id DESC
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //Api Response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'El estatus del usuario ha sido actualizado correctamente.',
-        estatus: {
-          estatus: estatus,
-        },
+        estatus: { estatus },
         data: {
-          id: id,
+          id,
           nombre:
             `${usuarioResult.nombre} ${usuarioResult.apellidoPaterno} ` || '',
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
       const querylogger = { updateUsuarioEstatusDto };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -916,28 +553,18 @@ ORDER BY u.Id DESC
     }
   }
 
-  // ========================================
-  // 🔹 ELIMINAR USUARIO
-  // ========================================
   async deleteUsuario(id: number, idUser: string): Promise<ApiCrudResponse> {
     try {
       const usuario = await this.usuarioRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!usuario) {
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
-      //Se hacer eliminado logico
-      //Cambiamos el estatus del usuario a 0
+
       await this.usuarioRepository.update(id, { estatus: 0 });
 
-      //buscamos sus permisos
-      const permisos = await this.usuariosPermisosRepository.find({
-        where: { idUsuario: id },
-      });
-
-      //-----Registro en la bitacora----- SUCCESS
-      const querylogger = { id: id, estatus: 0 };
+      const querylogger = { id, estatus: 0 };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
         `Se eliminó el usuario con ID: ${id}.`,
@@ -947,19 +574,17 @@ ORDER BY u.Id DESC
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.SUCCESS,
       );
-      //Api response
-      const result: ApiCrudResponse = {
+
+      return {
         status: 'success',
         message: 'El usuario ha sido eliminado correctamente.',
         data: {
-          id: id,
+          id,
           nombre: `${usuario.nombre} ${usuario.apellidoPaterno} ` || '',
         },
       };
-      return result;
     } catch (error) {
-      //-----Registro en la bitacora----- ERROR
-      const querylogger = { id: id, estatus: 0 };
+      const querylogger = { id, estatus: 0 };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
         `Se eliminó el usuario con ID: ${id}.`,

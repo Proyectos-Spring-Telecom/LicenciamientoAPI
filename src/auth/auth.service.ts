@@ -7,13 +7,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Usuarios } from 'src/entities/Usuarios';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { UsuariosPermisos } from 'src/entities/UsuariosPermisos';
-import { LoginAuthPinDto } from './dto/login-pin.dto';
 import { MailService } from 'src/mail/mail.service';
 import { LoginAuthConfirmacionDto } from './dto/login-confirmacion.dto';
 import { LoginAuthResetDto } from './dto/login-recuperacion.dto';
@@ -22,417 +20,214 @@ import { EstatusEnumBitcora } from 'src/common/ApiResponse';
 import { CodigoAutenticacion } from 'src/entities/CodigoAutenticacion';
 import { EstatusEnum, TipoCodigoAutenticacion } from 'src/common/estatus.enum';
 import { CodigoPasajeroAutenticacion } from './dto/login-autenticacion.dto';
-import { horaDesfasada } from 'src/utils/correccion-hora';
+import { RefreshSessions } from 'src/entities/RefreshSessions';
+import { AuthTokensService } from './auth-tokens.service';
+import { RefreshTokenPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
   constructor(
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
-    @InjectRepository(UsuariosPermisos)
-    private permisosRepository: Repository<UsuariosPermisos>,
     @InjectRepository(CodigoAutenticacion)
-    private codigoAutenticacioRepository: Repository<CodigoAutenticacion>,
+    private readonly codigoAutenticacioRepository: Repository<CodigoAutenticacion>,
+    @InjectRepository(RefreshSessions)
+    private readonly refreshSessionsRepository: Repository<RefreshSessions>,
     private readonly jwtService: JwtService,
+    private readonly authTokensService: AuthTokensService,
     private readonly emailService: MailService,
     private readonly bitacoraLogger: BitacoraLoggerService,
+    private readonly dataSource: DataSource,
   ) { }
 
-  /*   // ========================================
-    //Creacion de una afiliacion
-    // ========================================
-    async createPasajero(createAltaPasajaroDto: CreateAltaPasajaroDto) {
-      try {
-        //Buscamos el monedero que este dado de alta
-        const monederos = await this.monederoService.findOneMonederoBySerie(
-          createAltaPasajaroDto.numeroSerieMonedero,
-        );
-  
-        if (monederos.data.idPasajero) {
-          throw new BadRequestException(
-            `El monedero con numero de serie ${createAltaPasajaroDto.numeroSerieMonedero} esta ligado a un pasajero`,
-          );
-        }
-  
-        const existUsuario = await this.usuariosRepository.findOne({
-          //Buscamos si existe usuario
-          where: { userName: createAltaPasajaroDto.correo },
-        });
-        if (existUsuario) {
-          throw new BadRequestException('El usuario ya se encuentra registrado.');
-        }
-  
-        const hashedPassword = await bcrypt.hash(
-          createAltaPasajaroDto.passwordHash,
-          10,
-        ); //encriptamos la contraseña
-        createAltaPasajaroDto.passwordHash = hashedPassword;
-  
-        //creamos el body para crear un usuario que le permita loguearse
-        const bodyUsuario = {
-          userName: createAltaPasajaroDto.correo,
-          passwordHash: createAltaPasajaroDto.passwordHash,
-          emailConfirmado: 0,
-          nombre: createAltaPasajaroDto.nombre,
-          apellidoPaterno: createAltaPasajaroDto.apellidoPaterno,
-          apellidoMaterno: createAltaPasajaroDto.apellidoMaterno,
-          telefono: createAltaPasajaroDto.telefono,
-          fotoPerfil:
-            'https://transmovi.s3.us-east-2.amazonaws.com/imagenes/user_default.png',
-          estatus: 1,
-          idRol: 9,
-          idCliente: monederos.data.idCliente,
-        };
-  
-        //Creamos el usuario
-        const newUser = await this.usuariosRepository.create(bodyUsuario);
-        const userSave = await this.usuariosRepository.save(newUser); //creamos el usuario
-  
-        //Le añadimos los permisos correspondientes
-        const permisosIds = [122];
-        if (permisosIds.length > 0) {
-          const usuariosPermisos = permisosIds.map((permisoId) =>
-            this.permisosRepository.create({
-              idUsuario: userSave.id,
-              idPermiso: permisoId,
-            }),
-          );
-  
-          //guardamos los permisos
-          await this.permisosRepository.save(usuariosPermisos);
-        }
-  
-        //Creamos el body del pasajero
-        const bodyPasajero = {
-          nombre: createAltaPasajaroDto.nombre,
-          apellidoPaterno: createAltaPasajaroDto.apellidoPaterno,
-          apellidoMaterno: createAltaPasajaroDto.apellidoMaterno,
-          telefono: createAltaPasajaroDto.telefono,
-          fechaNacimiento: createAltaPasajaroDto.fechaNacimiento,
-          correo: createAltaPasajaroDto.correo,
-          estatus: 1,
-          estadoSolicitud: EnumSolicitudPasajero.NOSOLICITADO,
-        };
-  
-        //Creamos el pasajero
-        const pasajero = await this.pasajeroService.createPasajerosAfiliacion(
-          bodyPasajero,
-          userSave.id,
-        );
-  
-        //armamos el payload para el token
-        const payload = {
-          id: userSave.id,
-          email: userSave.userName,
-        };
-  
-        //creamos el token
-        const token = this.jwtService.sign(payload, {
-          expiresIn: `${process.env.JWT_CONFIRMACION}`,
-        });
-  
-        //Llamamos la funcion que nos genera el codigo
-        const codigo = await this.generarCodigo(
-          userSave.id,
-          TipoCodigoAutenticacion.CONFIRMACION_CORREO,
-        );
-        //Enviar correo de confirmacion
-        const name = `${userSave.nombre} ${userSave.apellidoPaterno} ${userSave.apellidoMaterno ?? ''}`;
-        await this.emailService.sendConfirmationEmail(
-          userSave.userName,
-          name,
-          token,
-          codigo,
-        );
-  
-        //afiliamos el monedero al pasajero y cambiamos estatus activo
-        function pad(n: number) {
-          return n < 10 ? '0' + n : n;
-        }
-  
-        const ahora = new Date();
-        const desfaseMs = -6 * 60 * 60 * 1000; // -6 horas en milisegundos
-        const fechaDesfasada = new Date(ahora.getTime() + desfaseMs);
-  
-        const fechaActual = `${fechaDesfasada.getFullYear()}-${pad(fechaDesfasada.getMonth() + 1)}-${pad(fechaDesfasada.getDate())} ${pad(fechaDesfasada.getHours())}:${pad(fechaDesfasada.getMinutes())}:${pad(fechaDesfasada.getSeconds())}`;
-  
-        await this.monederoService.updateMonedero(
-          monederos.data.id,
-          userSave.id,
-          {
-            idPasajero: pasajero.data?.id,
-            fechaActivacion: fechaActual,
-            estatus: EstatusEnum.ACTIVO,
-          },
-        );
-  
-        //-----Registro en la bitacora----- SUCCESS
-        const querylogger = { createAltaPasajaroDto };
-        await this.bitacoraLogger.logToBitacora(
-          'Usuarios',
-          `Se ha creado un usuario con nombre: ${userSave.nombre}.`,
-          'CREATE',
-          querylogger,
-          Number(userSave.id),
-          2,
-          EstatusEnumBitcora.SUCCESS,
-        );
-  
-        const { passwordHash: _, ...usuarioSinPassword } = newUser;
-  
-        //Api response
-        const result: ApiCrudResponse = {
-          status: 'success',
-          message: 'Usuario creado correctamente',
-          data: {
-            id: Number(usuarioSinPassword.id),
-            nombre:
-              `${usuarioSinPassword.nombre} ${usuarioSinPassword.apellidoPaterno} ` ||
-              '',
-          },
-        };
-        return result;
-      } catch (error) {
-        if (error instanceof HttpException) {
-          throw error;
-        }
-        throw new InternalServerErrorException(
-          'Ha ocurrido un error durante el proceso de creación del pasajero.',
-        );
-      }
-    }
-   */
-  /* // ========================================
-   //Login por PIN
-   // ========================================
-   async singInPin(loginAuthPin: LoginAuthPinDto) {
-     try {
-       //buscamos el usuario
-        Debe tener el mismo correo
-          Debe estar activo en estatus
-          debe estar confirmado el correo
-          y el cliente al que pertenece debe estar activo
-       
-       const user = await this.usuariosRepository.findOne({
-         relations: ['idRol2', 'idCliente2'],
-         where: {
-           userName: loginAuthPin.userName,
-           estatus: 1,
-           emailConfirmado: 1,
-           idCliente2: {
-             estatus: 1,
-           },
-         },
-       });
- 
- 
-       if (user?.idCliente2?.estatus === 0) {
-         throw new UnauthorizedException(
-           'Acceso denegado: el cliente ha sido dado de baja.',
-         );
-       }
-       if (!user) {
-         throw new NotFoundException('No se encontró al usuario.');
-       }
-       if (user.deviceId !== loginAuthPin.deviceId) {
-         throw new NotFoundException('El dispositivo reportado no coincide con el dispositivo asignado al usuario.');
-       }
- 
-       if (
-         !user ||
-         !user.pinHash ||
-         !(await bcrypt.compare(loginAuthPin.pinHash, user.pinHash))
-       ) {
-         throw new UnauthorizedException('Credenciales invalidas');
-       }
-       const permisos = await this.permisosRepository.find({
-         select: ['idPermiso'],
-         where: { idUsuario: user.id, estatus: 1 },
-       });
- 
-       function pad(n: number) {
-         return n < 10 ? '0' + n : n;
-       }
- 
-       const ahora = new Date();
-       const desfaseMs = -6 * 60 * 60 * 1000; // -6 horas en milisegundos
-       const fechaDesfasada = new Date(ahora.getTime() + desfaseMs);
- 
-       const fechaActual = `${fechaDesfasada.getFullYear()}-${pad(fechaDesfasada.getMonth() + 1)}-${pad(fechaDesfasada.getDate())} ${pad(fechaDesfasada.getHours())}:${pad(fechaDesfasada.getMinutes())}:${pad(fechaDesfasada.getSeconds())}`;
- 
-       await this.usuariosRepository.update(user.id, {
-         ultimoLogin: fechaActual,
-       });
-       const pin = user.pinHash ? 1 : 0;
-       const operador = await this.usuariosRepository.query(`
-           WITH DatosUsuario AS (
-     SELECT
-         u.Id AS IdUsuario,
-         u.UserName AS userName,
-         u.Nombre AS nombre,
-         u.ApellidoPaterno AS apellidoPaterno,
-         u.ApellidoMaterno AS apellidoMaterno,
-         u.Telefono AS telefono,
-         u.UltimoLogin AS ultimoLogin,
-         u.FechaCreacion AS fechaCreacion,
-         u.FotoPerfil AS fotoPerfil,
-         u.DeviceId AS deviceId,
- 
-         -- CLIENTE
-         c.Id AS idCliente,
-         c.Nombre AS nombreCliente,
-         c.ApellidoPaterno AS apellidoPaternoCliente,
-         c.ApellidoMaterno AS apellidoMaternoCliente,
-         c.Logotipo AS logotipo,
- 
-         -- OPERADOR
-         o.Id AS idOperador,
-         o.FechaNacimiento AS fechaNacimiento,
-         o.Identificacion AS identificacion,
-         o.Foto AS fotoOperador,
-         o.ComprobanteDomicilio AS comprobanteDomicilioOperador,
-         o.CertificadoMedico AS certificadoMedicoOperador,
-         o.AntecedentesNoPenales AS antecedentesNoPenalesOperador,
-         o.Estatus AS estatusOperador
-     FROM Usuarios u
-     INNER JOIN Clientes c ON c.Id = u.IdCliente
-     LEFT JOIN Operadores o ON o.IdUsuario = u.Id
-     WHERE u.Id = ${user.id}
- ),
- LicenciasJSON AS (
-     SELECT
-         o.IdUsuario,
-         JSON_ARRAYAGG(
-             JSON_OBJECT(
-                 'IdLicencia', l.Id,
-                 'Licencia', l.Licencia,
-                 'NumeroLicencia', l.NumeroLicencia,
-                 'FechaExpedicion', l.FechaExpedicion,
-                 'FechaVencimiento', l.FechaVencimiento,
-                 'IdTipoLicencia', l.IdTipoLicencia,
-                 'IdCategoriaLicencia', l.IdCategoriaLicencia
-             )
-         ) AS Licencias
-     FROM Operadores o
-     LEFT JOIN Licencias l ON l.IdOperador = o.Id
-     GROUP BY o.IdUsuario
- )
- SELECT 
-     du.*,
-     lj.Licencias
- FROM DatosUsuario du
- LEFT JOIN LicenciasJSON lj ON lj.IdUsuario = du.IdUsuario;
-           `)
- 
-       const payload = {
-         id: user.id,
-         email: user.userName,
-         cliente: user.idCliente,
-         rol: user.idRol,
-         idOperador: operador[0].idOperador
-       };
-       return {
-         message: `login exitoso`,
-         id: Number(operador[0].IdUsuario),
-         nombre: operador[0].nombre,
-         apellidoPaterno: operador[0].apellidoPaterno,
-         apellidoMaterno: operador[0].apellidoMaterno,
-         fechaNacimiento: operador[0].fechaNacimiento,
-         identificacion: operador[0].identificacion,
-         comprobanteDomicilioOperador: operador[0].comprobanteDomicilioOperador,
-         certificadoMedicoOperador: operador[0].certificadoMedicoOperador,
-         antecedentesNoPenalesOperador: operador[0].antecedentesNoPenalesOperador,
-         estatusOperador: operador[0].estatusOperador,
-         idCliente: Number(operador[0].idCliente),
-         nombreCliente: operador[0].nombreCliente,
-         apellidoPaternoCliente: operador[0].apellidoPaternoCliente,
-         apellidoMaternoCliente: operador[0].apellidoMaternoCliente,
-         logotipo: operador[0].logotipo,
-         telefono: operador[0].telefono,
-         ultimoLogin: operador[0].ultimoLogin,
-         fechaCreacion: operador[0].fechaCreacion,
-         fotoPerfil: operador[0].fotoOperador,
-         deviceId: operador[0].deviceId,
-         pinExist: pin,
-         userName: user.userName,
-         Licencias: operador[0].Licencias,
-         rol: user.idRol2,
-         token: this.jwtService.sign(payload),
-         permisos: permisos,
-       };
-     } catch (error) {
-       if (error instanceof HttpException) {
-         throw error;
-       }
-       throw new InternalServerErrorException(error);
-     }
-   }
- */
-  // ========================================
-  //login por correo
-  // ========================================
   async signIn(loginAuthDto: LoginAuthDto) {
-    try {
-      const user = await this.usuariosRepository.findOne({
-        relations: ['idRol2'],
-        where: {
-          userName: loginAuthDto.userName,
-          estatus: 1,
-          emailConfirmed: 1,
-        },
-      });
-      if (!user) {
-        throw new NotFoundException('No se encontró al usuario.');
-      }
+    const user = await this.usuariosRepository.findOne({
+      where: {
+        userName: loginAuthDto.username,
+        estatus: 1,
+        emailConfirmed: 1,
+      },
+    });
 
-      if (
-        !user.passwordHash ||
-        !(await bcrypt.compare(loginAuthDto.password, user.passwordHash))
-      ) {
-        throw new UnauthorizedException('Credenciales invalidas');
-      }
-
-      const permisos = await this.permisosRepository.find({
-        select: ['idPermiso'],
-        where: { idUsuario: user.id, estatus: 1 },
-      });
-
-      const payload = {
-        id: user.id,
-        email: user.userName,
-        idGrupo: user.idGrupo,
-        rol: user.idRol,
-      };
-
-      return {
-        message: `login exitoso`,
-        id: Number(user.id),
-        nombre: user.nombre,
-        apellidoPaterno: user.apellidoPaterno,
-        apellidoMaterno: user.apellidoMaterno,
-        idGrupo: user.idGrupo ? Number(user.idGrupo) : null,
-        phoneNumber: user.phoneNumber,
-        fechaCreacion: user.fechaCreacion,
-        userName: user.userName,
-        email: user.email,
-        rol: user.idRol2,
-        token: this.jwtService.sign(payload),
-        permisos: permisos,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(error);
+    if (
+      !user ||
+      !user.passwordHash ||
+      !(await bcrypt.compare(loginAuthDto.password, user.passwordHash))
+    ) {
+      throw new UnauthorizedException('Credenciales inválidas');
     }
+
+    const token = this.authTokensService.signAccessToken(user);
+    const refresh = this.authTokensService.signRefreshToken(user.id);
+
+    await this.refreshSessionsRepository.save({
+      idUsuario: user.id,
+      jti: refresh.jti,
+      tokenHash: this.authTokensService.hashRefreshToken(refresh.token),
+      expiresAt: refresh.expiresAt,
+      revokedAt: null,
+      replacedById: null,
+    });
+
+    return {
+      token,
+      refreshToken: refresh.token,
+    };
   }
 
-  // ========================================
-  //confirmacion de correo
-  // ========================================
+  async refreshTokens(refreshToken: string) {
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = this.jwtService.verify<RefreshTokenPayload>(refreshToken);
+    } catch {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+
+    if (payload.type !== 'refresh' || !payload.jti || !payload.id) {
+      throw new UnauthorizedException('Refresh token inválido o expirado');
+    }
+
+    const tokenHash = this.authTokensService.hashRefreshToken(refreshToken);
+    const session = await this.refreshSessionsRepository.findOne({
+      where: {
+        jti: payload.jti,
+        idUsuario: payload.id,
+      },
+    });
+
+    if (
+      !session ||
+      session.revokedAt != null ||
+      session.tokenHash !== tokenHash ||
+      session.expiresAt.getTime() <= Date.now()
+    ) {
+      throw new UnauthorizedException('Sesión de refresh inválida o revocada');
+    }
+
+    const user = await this.usuariosRepository.findOne({
+      where: { id: payload.id, estatus: 1 },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuario no autorizado');
+    }
+
+    const token = this.authTokensService.signAccessToken(user);
+    const refresh = this.authTokensService.signRefreshToken(user.id);
+
+    await this.dataSource.transaction(async (manager) => {
+      const newSession = await manager.save(RefreshSessions, {
+        idUsuario: user.id,
+        jti: refresh.jti,
+        tokenHash: this.authTokensService.hashRefreshToken(refresh.token),
+        expiresAt: refresh.expiresAt,
+        revokedAt: null,
+        replacedById: null,
+      });
+
+      await manager.update(RefreshSessions, session.id, {
+        revokedAt: new Date(),
+        replacedById: newSession.id,
+      });
+    });
+
+    return {
+      token,
+      refreshToken: refresh.token,
+    };
+  }
+
+  async logoutRefresh(refreshToken: string) {
+    let payload: RefreshTokenPayload;
+
+    try {
+      payload = this.jwtService.verify<RefreshTokenPayload>(refreshToken);
+    } catch {
+      return { message: 'Sesión cerrada' };
+    }
+
+    if (payload.type !== 'refresh' || !payload.jti || !payload.id) {
+      return { message: 'Sesión cerrada' };
+    }
+
+    const tokenHash = this.authTokensService.hashRefreshToken(refreshToken);
+    const session = await this.refreshSessionsRepository.findOne({
+      where: {
+        jti: payload.jti,
+        idUsuario: payload.id,
+      },
+    });
+
+    if (
+      session &&
+      session.revokedAt == null &&
+      session.tokenHash === tokenHash
+    ) {
+      await this.refreshSessionsRepository.update(session.id, {
+        revokedAt: new Date(),
+      });
+    }
+
+    return { message: 'Sesión cerrada' };
+  }
+
+  async getMe(userId: number) {
+    const user = await this.usuariosRepository.findOne({
+      relations: ['idRol2', 'idGrupo2'],
+      where: { id: userId, estatus: 1 },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuario no autorizado');
+    }
+
+    const permisosRows = user.idRol
+      ? await this.usuariosRepository.query(
+          `SELECT rp.IdPermiso AS idPermiso
+           FROM RolesPermisos rp
+           INNER JOIN Permisos p ON p.Id = rp.IdPermiso
+           WHERE rp.IdRol = ? AND p.Estatus = 1`,
+          [user.idRol],
+        )
+      : [];
+
+    const permisos = permisosRows.map((row: { idPermiso: number }) =>
+      String(row.idPermiso),
+    );
+
+    const nombre = user.nombre ?? '';
+    const apellidoPaterno = user.apellidoPaterno ?? '';
+    const apellidoMaterno = user.apellidoMaterno ?? '';
+    const nombreCompleto = [nombre, apellidoPaterno, apellidoMaterno]
+      .filter((part) => part.trim().length > 0)
+      .join(' ');
+
+    return {
+      id: Number(user.id),
+      nombre: user.nombre,
+      apellidoPaterno: user.apellidoPaterno,
+      apellidoMaterno: user.apellidoMaterno,
+      nombreCompleto,
+      permisos,
+      logo: null,
+      nombreRol: user.idRol2?.nombre ?? null,
+      nombreGrupo: user.idGrupo2?.nombre ?? null,
+    };
+  }
+
+  async revokeAllRefreshSessionsForUser(userId: number): Promise<void> {
+    await this.refreshSessionsRepository
+      .createQueryBuilder()
+      .update(RefreshSessions)
+      .set({ revokedAt: new Date() })
+      .where('IdUsuario = :userId', { userId })
+      .andWhere('RevokedAt IS NULL')
+      .execute();
+  }
+
   async verifyUser(codigoPasajeroAutenticacion: CodigoPasajeroAutenticacion) {
     try {
-      //Buscamos el codigo en la tabla CodigoAutenticacion tiene que ser  Tipo: 0 y Estatus: 1
       const codigoValido = await this.codigoAutenticacioRepository.findOne({
         where: {
           codigo: codigoPasajeroAutenticacion.codigo,
@@ -441,38 +236,31 @@ export class AuthService {
         },
       });
 
-      //En caso de no encontrar manda error
       if (!codigoValido) {
         throw new BadRequestException('Código inválido o ya usado');
       }
 
-      //Buscamos al usuario por la relacion que tiene la tabla CodigoAutenticacion
       const user = await this.usuariosRepository.findOne({
         where: { id: codigoValido.idUsuario },
       });
       if (!user) throw new BadRequestException('Usuario no encontrado');
 
-      //Generamos la fecha con un retraso de 6 horas para que se guarde de manera correcta
       function pad(n: number) {
         return n < 10 ? '0' + n : n;
       }
 
       const ahora = new Date();
-      const desfaseMs = -6 * 60 * 60 * 1000; // -6 horas en milisegundos
+      const desfaseMs = -6 * 60 * 60 * 1000;
       const fechaDesfasada = new Date(ahora.getTime() + desfaseMs);
 
       const fechaActual = `${fechaDesfasada.getFullYear()}-${pad(fechaDesfasada.getMonth() + 1)}-${pad(fechaDesfasada.getDate())} ${pad(fechaDesfasada.getHours())}:${pad(fechaDesfasada.getMinutes())}:${pad(fechaDesfasada.getSeconds())}`;
 
-      //Verificamos que la fecha no sea mayor a la de expiracion en caso de ser asi
-      //el codigo ha expirado
       if (fechaDesfasada > codigoValido.fechaExpiracion) {
         throw new BadRequestException('El código ha expirado');
       }
 
-      //cambiamos el estatus del email a 1 del usuario correspondiente
       await this.usuariosRepository.update(user.id, { emailConfirmed: 1 });
 
-      //-----Registro en la bitacora----- SUCCESS
       const querylogger = { id: user.id, EmailConfirmado: 1 };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
@@ -484,7 +272,6 @@ export class AuthService {
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //en la tabla CodigoAutenticacion actualizamos para dar a entender que ya se uso el codigo
       await this.codigoAutenticacioRepository.update(codigoValido.id, {
         usado: EstatusEnum.INACTIVO,
         estatus: EstatusEnum.INACTIVO,
@@ -504,38 +291,36 @@ Muchas gracias por su preferencia.`;
     }
   }
 
-  // ========================================
-  //enviar correo para recuperar contraseña
-  // ========================================
   async recuperarContrasena(
     loginAuthConfirmacionDto: LoginAuthConfirmacionDto,
   ) {
     try {
-      //Buscamos el usuario por correo
       const user = await this.usuariosRepository.findOne({
         where: { userName: loginAuthConfirmacionDto.userName },
       });
       if (!user) throw new BadRequestException('Usuario no encontrado');
 
-      //Generamos el codigo
       const codigo = await this.generarCodigo(
         user.id,
         TipoCodigoAutenticacion.RECUPERACION_CONTRASENA,
       );
 
-      //Generamos el payload para el tokenn
       const payload = {
         id: user.id,
         email: user.userName,
+        type: 'access',
       };
 
-      //Generamos el token
       const token = this.jwtService.sign(payload, {
         expiresIn: `${process.env.JWT_CONFIRMACION}`,
       });
       const name = `${user.nombre} ${user.apellidoPaterno} ${user.apellidoMaterno}`;
+      const emailDestino = user.email ?? user.userName;
+      if (!emailDestino) {
+        throw new BadRequestException('El usuario no tiene correo registrado.');
+      }
       await this.emailService.sendResetPasswordEmail(
-        user.userName,
+        emailDestino,
         name,
         token,
         codigo,
@@ -552,28 +337,18 @@ Muchas gracias por su preferencia.`;
     }
   }
 
-  // ========================================
-  //Creacion de codigo de autenticacion
-  // ========================================
   async generarCodigo(idUsuario: number, tipo: number): Promise<string> {
-    // Generar código de 4 dígitos
     const codigo = Math.floor(1000 + Math.random() * 9000).toString();
 
-    //Generamos la fecha de Expiracion
     const ahora = new Date();
-    const desfaseMs = -6 * 60 * 60 * 1000; // -6 horas
-    const expiracionMs = 15 * 60 * 1000; // +15 minutos
-
+    const desfaseMs = -6 * 60 * 60 * 1000;
+    const expiracionMs = 15 * 60 * 1000;
     const expiracion = new Date(ahora.getTime() + expiracionMs + desfaseMs);
 
-    //Buscamos si ya existe un atributo con ese usuario
     const codigoExiste = await this.codigoAutenticacioRepository.findOne({
-      where: {
-        idUsuario: idUsuario,
-      },
+      where: { idUsuario },
     });
 
-    //si existe actualiza los datos
     if (codigoExiste) {
       await this.codigoAutenticacioRepository.update(codigoExiste.id, {
         codigo,
@@ -584,11 +359,10 @@ Muchas gracias por su preferencia.`;
         fechaUso: null,
       });
     } else {
-      //si no se crea el atributo
       const codigoCreate = this.codigoAutenticacioRepository.create({
-        idUsuario: idUsuario,
-        codigo: codigo,
-        tipo: tipo,
+        idUsuario,
+        codigo,
+        tipo,
         fechaExpiracion: expiracion,
         usado: EstatusEnum.ACTIVO,
         estatus: EstatusEnum.ACTIVO,
@@ -596,13 +370,9 @@ Muchas gracias por su preferencia.`;
       await this.codigoAutenticacioRepository.save(codigoCreate);
     }
 
-    //regresa el codigo
     return codigo;
   }
 
-  // ========================================
-  //recuperar la confirmacion de correo
-  // ========================================
   async recuperarConfirmacion(
     loginAuthConfirmacionDto: LoginAuthConfirmacionDto,
   ) {
@@ -620,13 +390,18 @@ Muchas gracias por su preferencia.`;
       const payload = {
         id: user.id,
         email: user.userName,
+        type: 'access',
       };
       const token = this.jwtService.sign(payload, {
         expiresIn: `${process.env.JWT_CONFIRMACION}`,
       });
       const name = `${user.nombre} ${user.apellidoPaterno} ${user.apellidoMaterno}`;
+      const emailDestino = user.email ?? user.userName;
+      if (!emailDestino) {
+        throw new BadRequestException('El usuario no tiene correo registrado.');
+      }
       await this.emailService.sendConfirmationEmail(
-        user.userName,
+        emailDestino,
         name,
         token,
         codigo,
@@ -643,9 +418,6 @@ Muchas gracias por su preferencia.`;
     }
   }
 
-  // ========================================
-  //actualizar contraseña
-  // ========================================
   async resetPassword(loginAuthResetDto: LoginAuthResetDto) {
     try {
       const user = await this.usuariosRepository.findOne({
@@ -653,12 +425,13 @@ Muchas gracias por su preferencia.`;
       });
       if (!user) throw new BadRequestException('Usuario no encontrado');
 
-      const hashedPassword = await bcrypt.hash(loginAuthResetDto.password, 10); //encriptamos la contraseña
-      loginAuthResetDto.password = hashedPassword;
+      const hashedPassword = await bcrypt.hash(loginAuthResetDto.password, 10);
       await this.usuariosRepository.update(user.id, {
         passwordHash: hashedPassword,
       });
-      //-----Registro en la bitacora----- SUCCESS
+
+      await this.revokeAllRefreshSessionsForUser(user.id);
+
       const querylogger = { id: user.id, EmailConfirmado: 1 };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',

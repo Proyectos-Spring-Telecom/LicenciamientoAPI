@@ -3,19 +3,18 @@ import {
   Post,
   Body,
   HttpCode,
-  Get,
-  Query,
   UseGuards,
   Patch,
+  Get,
   Request,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginAuthDto } from './dto/login-auth.dto';
-import { LoginAuthPinDto } from './dto/login-pin.dto';
 import { LoginAuthConfirmacionDto } from './dto/login-confirmacion.dto';
 import { LoginAuthResetDto } from './dto/login-recuperacion.dto';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { CodigoPasajeroAutenticacion } from './dto/login-autenticacion.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Autenticación')
@@ -23,10 +22,6 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 @Controller('login')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  // ========================================
-  // 🔹 POST ROUTES - Rutas específicas primero
-  // ========================================
 
   @Post('usuario/recuperar/acceso')
   async email(@Body() loginAuthConfirmacionDto: LoginAuthConfirmacionDto) {
@@ -42,11 +37,17 @@ export class AuthController {
     );
   }
 
-/*   @Post('operador/login')
+  @Post('refresh')
   @HttpCode(200)
-  async loginPin(@Body() loginAuthPinDto: LoginAuthPinDto) {
-    return this.authService.singInPin(loginAuthPinDto);
-  } */
+  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.refreshTokens(refreshTokenDto.refreshToken);
+  }
+
+  @Post('logout')
+  @HttpCode(200)
+  async logout(@Body() refreshTokenDto: RefreshTokenDto) {
+    return this.authService.logoutRefresh(refreshTokenDto.refreshToken);
+  }
 
   @Post()
   @HttpCode(200)
@@ -54,9 +55,11 @@ export class AuthController {
     return this.authService.signIn(loginAuthDto);
   }
 
-  // ========================================
-  // 🔹 PATCH ROUTES - Rutas específicas primero
-  // ========================================
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async me(@Request() req) {
+    return this.authService.getMe(req.user.userId);
+  }
 
   @Post('cambiar/accesso')
   @UseGuards(JwtAuthGuard)

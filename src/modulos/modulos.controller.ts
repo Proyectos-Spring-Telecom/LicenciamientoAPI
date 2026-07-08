@@ -3,21 +3,24 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
-  Delete,
   Put,
+  Patch,
   Request,
-  Query,
-  Res,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { ModulosService } from './modulos.service';
 import { CreateModuloDto } from './dto/create-modulo.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { UpdateModulosEstatusDto } from './dto/update-modulo-estatus.dto';
 import { ApiCrudResponse, ApiResponseCommon } from 'src/common/ApiResponse';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
@@ -26,13 +29,22 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 @ApiTags('Modulos')
 @ApiBearerAuth('bearer-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(1, 2, 3) // Todos los roles pueden acceder por defecto
+@Roles(4)
 @Controller('modulos')
 export class ModulosController {
-  constructor(private readonly modulosService: ModulosService) {}
+  constructor(private readonly modulosService: ModulosService) { }
 
   @Post()
-  @Roles(1) // Solo SuperAdministrador puede crear módulos
+  @Roles()
+  @ApiOperation({
+    summary: 'Crear un nuevo módulo',
+    description: 'Registra un módulo en CatModulos con estatus activo (1) por defecto.',
+  })
+  @ApiBody({ type: CreateModuloDto })
+  @ApiResponse({ status: 201, description: 'Módulo creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o módulo duplicado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso denegado - Solo SuperAdministrador' })
   async create(
     @Body() createModuloDto: CreateModuloDto,
     @Request() req,
@@ -42,11 +54,43 @@ export class ModulosController {
   }
 
   @Get('list')
-  findAllList(): Promise<ApiResponseCommon> {
+  @ApiOperation({
+    summary: 'Listar módulos activos',
+    description:
+      'Obtiene todos los módulos activos con estatus 1. Solo retorna id y nombre.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de módulos activos obtenida exitosamente',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  findAllList() {
     return this.modulosService.findAllList();
   }
 
   @Get(':page/:limit')
+  @ApiOperation({
+    summary: 'Listar módulos paginados',
+    description:
+      'Obtiene módulos con paginación. Retorna data (id, nombre, estatus) y paginated.',
+  })
+  @ApiParam({
+    name: 'page',
+    type: 'number',
+    description: 'Número de página',
+    example: 1,
+  })
+  @ApiParam({
+    name: 'limit',
+    type: 'number',
+    description: 'Cantidad de registros por página',
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Módulos paginados obtenidos exitosamente',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
   findAll(
     @Param('page', ParseIntPipe) page: number,
     @Param('limit', ParseIntPipe) limit: number,
@@ -55,38 +99,69 @@ export class ModulosController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.modulosService.findOne(+id);
+  @ApiOperation({
+    summary: 'Obtener módulo por ID',
+    description: 'Consulta un módulo por su identificador con sus permisos.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'number',
+    description: 'ID del módulo',
+    example: 1,
+  })
+  @ApiResponse({ status: 200, description: 'Módulo obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Módulo no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.modulosService.findOne(id);
   }
 
-  @Put(':id')
+  @Put()
+  @ApiOperation({
+    summary: 'Actualizar módulo',
+    description: 'Actualiza el nombre de un módulo existente. El Id se envía en el body.',
+  })
+  @ApiBody({
+    type: UpdateModuloDto,
+    examples: {
+      default: {
+        summary: 'Actualizar módulo',
+        value: { Id: 1, Nombre: 'Módulos' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Módulo actualizado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o nombre duplicado' })
+  @ApiResponse({ status: 404, description: 'Módulo no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
   async update(
-    @Param('id', ParseIntPipe) id: number,
     @Body() updateModuloDto: UpdateModuloDto,
     @Request() req,
-  ): Promise <ApiCrudResponse> {
+  ): Promise<ApiCrudResponse> {
     const idUser = req.user.userId;
-    return await this.modulosService.update(id,updateModuloDto, idUser);
+    return await this.modulosService.update(updateModuloDto, idUser);
   }
 
   @Patch(':id/estatus')
+  @ApiOperation({
+    summary: 'Alternar estatus del módulo',
+    description:
+      'Alterna el estatus del módulo (1↔0) y sincroniza el mismo estatus en todos sus permisos relacionados. No requiere body.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'number',
+    description: 'ID del módulo',
+    example: 1,
+  })
+  @ApiResponse({ status: 200, description: 'Estatus actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Módulo no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
   async updateModuloEstatus(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Request() req,
-    @Body()updateModulosEstatusDto: UpdateModulosEstatusDto,
-  ):Promise <ApiCrudResponse> {
+  ): Promise<ApiCrudResponse> {
     const idUser = req.user.userId;
-    return await this.modulosService.updateModulosStatus(
-      +id,
-      idUser,
-      updateModulosEstatusDto,
-    );
-  }
-
-  @Delete(':id')
-  @Roles(1) // Solo SuperAdministrador puede eliminar módulos
-  async remove(@Param('id',ParseIntPipe)id:number,@Request()req):Promise <ApiCrudResponse> {
-    const idUser = req.user.userId;
-    return await this.modulosService.deleteModulo(id,idUser);
+    return await this.modulosService.updateModulosStatus(id, idUser);
   }
 }

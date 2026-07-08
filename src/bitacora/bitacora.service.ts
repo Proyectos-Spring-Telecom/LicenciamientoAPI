@@ -38,11 +38,10 @@ SELECT
   u.UserName AS UserNameUsuario,
   u.Estatus AS estatusUsuario,
   m.Id AS idModulo,
-  m.Nombre AS nombreModulo,
-  m.Descripcion AS descripcionModulo
+  m.Nombre AS nombreModulo
 FROM Bitacora b
 INNER JOIN Usuarios u ON b.IdUsuario = u.Id
-INNER JOIN Modulos m ON b.IdModulo = m.Id`;
+INNER JOIN CatModulos m ON b.IdModulo = m.Id`;
 
   async findAllListBitacora(idGrupo: number, rol: number) {
     try {
@@ -179,7 +178,7 @@ ORDER BY b.FechaCreacion DESC;`,
     accion: string,
     query: object,
     idUsuario: number,
-    idModulo: number,
+    idModulo: number | null,
     estatus?: string,
     error?: string,
   ) {
@@ -187,7 +186,7 @@ ORDER BY b.FechaCreacion DESC;`,
       modulo,
       descripcion,
       accion,
-      query,
+      query: JSON.stringify(query),
       estatus: estatus ?? null,
       error: error ?? null,
       idUsuario,

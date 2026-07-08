@@ -12,26 +12,25 @@ import {
   ParseIntPipe,
   Request,
 } from '@nestjs/common';
-import { PermisosService } from './permisos.service';
+import { PermisosService, ModuloAgrupado, PermisoListItem } from './permisos.service';
 import { CreatePermisoDto } from './dto/create-permiso.dto';
 import { UpdatePermisoDto } from './dto/update-permiso.dto';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
-import { UpdatePermisoEstatusDto } from './dto/update-permiso-estatus.dto';
 import { ApiCrudResponse, ApiResponseCommon } from 'src/common/ApiResponse';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Permisos')
 @ApiBearerAuth('bearer-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(1, 2, 3) // Todos los roles pueden acceder por defecto
+@Roles(4) // Todos los roles pueden acceder por defecto
 @Controller('permisos')
 export class PermisosController {
-  constructor(private readonly permisosService: PermisosService) {}
+  constructor(private readonly permisosService: PermisosService) { }
 
   @Post()
-  @Roles(1) // Solo SuperAdministrador puede crear permisos
+  @Roles() // Solo SuperAdministrador puede crear permisos
   async createPermioso(
     @Body() createPermiso: CreatePermisoDto,
     @Req() req,
@@ -49,16 +48,14 @@ export class PermisosController {
   }
 
   @Get('list')
-  async findAllList(): Promise<ApiResponseCommon> {
+  async findAllList(): Promise<PermisoListItem[]> {
     return await this.permisosService.findAllList();
   }
 
   @Get('permisosAgrupados')
-  async findAllAgrupado(@Req() req): Promise<any[]> {
-    const idUsuario = req.user.userId;
-    const permiso =
-      await this.permisosService.obtenerPermisosAgrupados(idUsuario);
-    return permiso;
+  async findAllAgrupado(@Req() req): Promise<ModuloAgrupado[]> {
+    const idRol = req.user.rol;
+    return await this.permisosService.obtenerPermisosAgrupados(idRol);
   }
 
   @Get(':id')
@@ -78,16 +75,11 @@ export class PermisosController {
 
   @Patch(':id/estatus')
   async updatePermisoEstatus(
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Request() req,
-    @Body() updatePermisoEstatusDto: UpdatePermisoEstatusDto,
   ): Promise<ApiCrudResponse> {
     const idUser = req.user.userId;
-    return await this.permisosService.updateEstatus(
-      +id,
-      idUser,
-      updatePermisoEstatusDto,
-    );
+    return await this.permisosService.updateEstatus(id, idUser);
   }
 
   @Delete(':id')

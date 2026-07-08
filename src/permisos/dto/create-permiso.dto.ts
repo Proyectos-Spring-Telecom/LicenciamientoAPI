@@ -2,47 +2,34 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
   IsNotEmpty,
-  IsOptional,
-  IsNumber,
   IsInt,
   MaxLength,
-  IsIn,
 } from 'class-validator';
 
 export class CreatePermisoDto {
-  @IsNumber()
-  @IsOptional()
-  id?: number;
-
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
+  @IsNotEmpty({ message: 'El nombre es obligatorio' })
+  @MaxLength(100, { message: 'El nombre no puede exceder 100 caracteres' })
   @ApiProperty({
     description: 'Nombre del permiso',
-    example: 'Permiso',
+    example: 'Crear usuarios',
   })
   nombre: string;
 
   @IsString()
-  @IsOptional()
-  @MaxLength(255)
+  @IsNotEmpty({ message: 'La descripción es obligatoria' })
+  @MaxLength(100, { message: 'La descripción no puede exceder 100 caracteres' })
   @ApiProperty({
     description: 'Descripción del permiso',
-    example: 'Permiso',
+    example: 'Permite crear usuarios en el sistema',
   })
-  descripcion?: string;
+  descripcion: string;
 
-  @IsNumber()
-  @IsNotEmpty()
+  @IsInt({ message: 'idModulo debe ser un número entero' })
+  @IsNotEmpty({ message: 'idModulo es obligatorio' })
   @ApiProperty({
-    description: 'Numero del modulo',
-    example: '1',
+    description: 'ID del módulo al que pertenece el permiso',
+    example: 21,
   })
   idModulo: number;
-
-  @IsOptional()
-  @IsInt({ message: 'Estatus debe ser 0 ó 1' })
-  @IsIn([0, 1], { message: 'Solo puede ser 0 ó 1' })
-  @ApiProperty({ description: 'Estatus del cliente', example: 1 })
-  estatus?: number = 1;
 }

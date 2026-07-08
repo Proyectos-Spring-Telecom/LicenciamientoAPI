@@ -3,26 +3,83 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CreatePermisoDto } from './dto/create-permiso.dto';
 import { UpdatePermisoDto } from './dto/update-permiso.dto';
 import { Permisos } from 'src/entities/Permisos';
+import { RolesPermisos } from 'src/entities/RolesPermisos';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
-import { UpdatePermisoEstatusDto } from './dto/update-permiso-estatus.dto';
 import { ApiCrudResponse, ApiResponseCommon, EstatusEnumBitcora } from 'src/common/ApiResponse';
-import { UsuariosPermisos } from 'src/entities/UsuariosPermisos';
+import { EnumModulos } from 'src/common/estatus.enum';
+
+const ROL_PERMISO_DEFAULT = 4;
+
+export interface PermisoAgrupadoRow {
+  IdPermiso: number;
+  IdModulo: number;
+  NombreModulo: string;
+  PermisoId: number;
+  PermisoNombre: string;
+  PermisoDescripcion: string;
+}
+
+export interface PermisoListItem {
+  idPermiso: number;
+  nombrePermiso: number | string | null;
+  descripcionPermiso: string | null;
+  idModulo: number;
+  nombreModulo: string | null;
+}
+
+export interface PermisoPaginatedItem extends PermisoListItem {
+  estatus: number;
+}
+
+export interface ModuloAgrupado {
+  IdModulo: number;
+  NombreModulo: string;
+  Permisos: {
+    Id: number;
+    Nombre: string;
+    Descripcion: string;
+  }[];
+}
 
 @Injectable()
 export class PermisosService {
   constructor(
     @InjectRepository(Permisos)
     private readonly permisoRepository: Repository<Permisos>,
-    @InjectRepository(UsuariosPermisos)
-    private readonly usuarioPermiso: Repository<UsuariosPermisos>,
+    @InjectRepository(RolesPermisos)
+    private readonly rolesPermisosRepository: Repository<RolesPermisos>,
     private readonly bitacoraLogger: BitacoraLoggerService,
-  ) {}
+  ) { }
+
+  private mapPermisoListItem(permiso: Permisos): PermisoListItem {
+    const nombrePermiso =
+      permiso.nombre != null && permiso.nombre.trim() !== '' &&
+      !Number.isNaN(Number(permiso.nombre))
+        ? Number(permiso.nombre)
+        : permiso.nombre;
+
+    return {
+      idPermiso: Number(permiso.id),
+      nombrePermiso,
+      descripcionPermiso: permiso.descripcion ?? permiso.nombre,
+      idModulo: Number(permiso.idModulo),
+      nombreModulo: permiso.idModulo2?.nombre ?? null,
+    };
+  }
+
+  private mapPermisoPaginatedItem(permiso: Permisos): PermisoPaginatedItem {
+    return {
+      ...this.mapPermisoListItem(permiso),
+      estatus: permiso.estatus,
+    };
+  }
 
   //Obtener todos los permisos con paginado
   async findAll(page: number, limit: number): Promise<ApiResponseCommon> {
@@ -30,31 +87,29 @@ export class PermisosService {
       relations: ['idModulo2'],
       skip: (page - 1) * limit,
       take: limit,
+      order: { id: 'ASC' },
     });
 
-    const result: ApiResponseCommon = {
-      data,
+    return {
+      data: data.map((permiso) => this.mapPermisoPaginatedItem(permiso)),
       paginated: {
-        total: total,
+        total,
         page,
         lastPage: Math.ceil(total / limit),
       },
     };
-
-    return result;
   }
 
   //Obtener todos los permisos
-  async findAllList(): Promise<ApiResponseCommon> {
+  async findAllList(): Promise<PermisoListItem[]> {
     try {
       const permisos = await this.permisoRepository.find({
         relations: ['idModulo2'],
         where: { estatus: 1 },
+        order: { id: 'ASC' },
       });
-      const result: ApiResponseCommon = {
-        data: permisos,
-      };
-      return result;
+
+      return permisos.map((permiso) => this.mapPermisoListItem(permiso));
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -91,16 +146,22 @@ export class PermisosService {
     idUsuario,
   ): Promise<ApiCrudResponse> {
     try {
-      const create = this.permisoRepository.create(createPermiso);
-      const savedPermiso = await this.permisoRepository.save(create);
-      const asignarRoot = {
-        idPermiso: savedPermiso.id,
-        idUsuario: 1, //Se asigna al usuario supremo
-      };
-      const permisoRoot = await this.usuarioPermiso.create(asignarRoot);
-      this.usuarioPermiso.save(permisoRoot);
+      const savedPermiso = await this.permisoRepository.save(
+        this.permisoRepository.create({
+          nombre: createPermiso.nombre,
+          descripcion: createPermiso.descripcion,
+          idModulo: createPermiso.idModulo,
+          estatus: 1,
+        }),
+      );
 
-      // --- Registro en la bitácora --- SUCCESS
+      await this.rolesPermisosRepository.save(
+        this.rolesPermisosRepository.create({
+          idRol: ROL_PERMISO_DEFAULT,
+          idPermiso: savedPermiso.id,
+        }),
+      );
+
       const querylogger = { createPermiso };
       await this.bitacoraLogger.logToBitacora(
         'Permisos',
@@ -108,23 +169,19 @@ export class PermisosService {
         'CREATE',
         querylogger,
         Number(idUsuario),
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      const idPer = savedPermiso.id;
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
         message: 'Permiso creado correctamente',
         data: {
-          id: Number(idPer),
-          nombre: `${savedPermiso.nombre} ${savedPermiso.descripcion} ` || '',
+          id: Number(savedPermiso.id),
+          nombre: savedPermiso.nombre ?? '',
         },
       };
-      return result;
     } catch (error) {
-      // --- Registro en la bitácora --- ERROR
       const querylogger = { createPermiso };
       await this.bitacoraLogger.logToBitacora(
         'Permisos',
@@ -132,7 +189,7 @@ export class PermisosService {
         'CREATE',
         querylogger,
         Number(idUsuario),
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
         error.message,
       );
@@ -147,55 +204,55 @@ export class PermisosService {
   async updateEstatus(
     id: number,
     idUser: number,
-    updatePermisoEstatusDto: UpdatePermisoEstatusDto,
   ): Promise<ApiCrudResponse> {
     try {
       const permiso = await this.permisoRepository.findOne({
-        where: { id: id },
+        where: { id },
       });
       if (!permiso) throw new NotFoundException('Permiso no encontrado');
-      //Actualiza
-      const permisoResult = await this.permisoRepository.update(id, {
-        estatus: updatePermisoEstatusDto.estatus,
-      });
 
-      // --- Registro en la bitácora --- SUCCESS
-      const querylogger = { updatePermisoEstatusDto };
+      const estatus = permiso.estatus === 1 ? 0 : 1;
+      await this.permisoRepository.update(id, { estatus });
+
+      const querylogger = { id, estatus };
       await this.bitacoraLogger.logToBitacora(
         'Permisos',
-        `Se actualizo a estatus ${updatePermisoEstatusDto.estatus} del permiso: ${permiso.nombre}`,
+        `Se actualizo a estatus ${estatus} del permiso: ${permiso.nombre}`,
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      //Api response
-      const result: ApiCrudResponse = {
+      return {
         status: 'success',
-        message: 'Usuario creado correctamente',
-        estatus: { estatus: updatePermisoEstatusDto.estatus },
+        message: 'Estatus permiso actualizado correctamente',
+        estatus: { estatus },
         data: {
-          id: id,
-          nombre: `${permiso.nombre} ${permiso.descripcion} ` || '',
+          id,
+          nombre: permiso.nombre ?? '',
         },
       };
-      return result;
     } catch (error) {
-      // --- Registro en la bitácora --- ERROR
-      const querylogger = { updatePermisoEstatusDto };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
         'Permisos',
-        `Se actualizo a estatus ${updatePermisoEstatusDto.estatus} del permiso ID: ${id}`,
+        `Se actualizo el estatus del permiso ID: ${id}`,
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
         error.message,
       );
-      return error;
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al cambiar estatus del permiso',
+      );
     }
   }
 
@@ -205,17 +262,15 @@ export class PermisosService {
     idUser: number,
   ): Promise<ApiCrudResponse> {
     try {
-      const permisoActualizar = {
-        nombre: updatePermiso.nombre,
-        descripcion: updatePermiso.descripcion,
-        estatus: updatePermiso.estatus,
-        idModulo: updatePermiso.idModulo,
-      };
       const permiso = await this.permisoRepository.findOne({
         where: { id: id },
       });
       if (!permiso) throw new NotFoundException('Permiso no encontrado');
-      await this.permisoRepository.update(id, permisoActualizar);
+
+      await this.permisoRepository.update(id, {
+        descripcion: updatePermiso.descripcion,
+      });
+
       const permisoResult = await this.permisoRepository.findOne({
         where: { id: id },
       });
@@ -238,8 +293,7 @@ export class PermisosService {
         message: 'Permiso actualizado correctamente',
         data: {
           id: id,
-          nombre:
-            `${permisoResult?.nombre} ${permisoResult?.descripcion} ` || '',
+          nombre: permisoResult?.nombre ?? '',
         },
       };
       return result;
@@ -310,61 +364,85 @@ export class PermisosService {
       throw new InternalServerErrorException(`Error al eliminar permisos`);
     }
   }
-  async obtenerPermisosAgrupados(idUsuario): Promise<any[]> {
-    try {
-      // Consulta SQL cruda
-      const query = `
-            SELECT 
-            DISTINCT UsuariosPermisos.IdPermiso,
-              Modulos.Id AS IdModulo,
-              Modulos.Nombre AS NombreModulo,
-              Permisos.Id AS PermisoId,
-              Permisos.Nombre AS PermisoNombre,
-              Permisos.Descripcion AS PermisoDescripcion
-            FROM 
-			Next.UsuariosPermisos
-            INNER JOIN 
-              Next.Permisos ON UsuariosPermisos.IdPermiso = Permisos.Id
-            INNER JOIN 
-             Next.Modulos ON Permisos.IdModulo = Modulos.Id
-            WHERE 
-              UsuariosPermisos.IdUsuario = '${idUsuario}'`;
 
-      // Ejecutar la consulta
-      const results = await this.permisoRepository.query(query);
 
-      if (!Array.isArray(results)) {
-        throw new Error('El resultado de la consulta no es un array');
+  private qualifiedTable(table: string): string {
+    const schema = process.env.DB_DATABASE || 'TAE';
+    return `\`${schema}\`.\`${table}\``;
+  }
+
+  private groupPermisosRows(rows: PermisoAgrupadoRow[]): ModuloAgrupado[] {
+    return rows.reduce<ModuloAgrupado[]>((result, item) => {
+      let moduloExistente = result.find(
+        (mod) => mod.IdModulo === item.IdModulo,
+      );
+
+      if (!moduloExistente) {
+        moduloExistente = {
+          IdModulo: item.IdModulo,
+          NombreModulo: item.NombreModulo,
+          Permisos: [],
+        };
+        result.push(moduloExistente);
       }
 
-      // Agrupar resultados
-      const permisosAgrupados = results.reduce((result, item) => {
-        let moduloExistente = result.find(
-          (mod) => mod.IdModulo === item.IdModulo,
-        );
+      moduloExistente.Permisos.push({
+        Id: item.PermisoId,
+        Nombre: item.PermisoNombre,
+        Descripcion: item.PermisoDescripcion,
+      });
 
-        if (!moduloExistente) {
-          moduloExistente = {
-            IdModulo: item.IdModulo,
-            NombreModulo: item.NombreModulo,
-            Permisos: [],
-          };
-          result.push(moduloExistente);
-        }
+      return result;
+    }, []);
+  }
 
-        moduloExistente.Permisos.push({
-          Id: item.PermisoId,
-          Nombre: item.PermisoNombre,
-          Descripcion: item.PermisoDescripcion,
-        });
+  private async getPermisosAgrupadosByRolId(
+    idRol: number,
+  ): Promise<ModuloAgrupado[]> {
+    const rolesPermisos = this.qualifiedTable('RolesPermisos');
+    const permisos = this.qualifiedTable('Permisos');
+    const modulos = this.qualifiedTable('CatModulos');
+    const roles = this.qualifiedTable('Roles');
 
-        return result;
-      }, []);
+    const query = `
+      SELECT DISTINCT
+        ${rolesPermisos}.IdPermiso,
+        ${modulos}.Id AS IdModulo,
+        ${modulos}.Nombre AS NombreModulo,
+        ${permisos}.Id AS PermisoId,
+        ${permisos}.Nombre AS PermisoNombre,
+        ${permisos}.Descripcion AS PermisoDescripcion
+      FROM ${rolesPermisos}
+      INNER JOIN ${roles} ON ${rolesPermisos}.IdRol = ${roles}.Id
+      INNER JOIN ${permisos} ON ${rolesPermisos}.IdPermiso = ${permisos}.Id
+      INNER JOIN ${modulos} ON ${permisos}.IdModulo = ${modulos}.Id
+      WHERE ${rolesPermisos}.IdRol = ?
+        AND ${roles}.Estatus = 1
+        AND ${permisos}.Estatus = 1
+        AND ${modulos}.Estatus = 1
+    `;
 
-      return permisosAgrupados;
+    const rows = (await this.permisoRepository.query(query, [
+      idRol,
+    ])) as PermisoAgrupadoRow[];
+
+    return this.groupPermisosRows(rows);
+  }
+
+  async obtenerPermisosAgrupados(idRol: number | null): Promise<ModuloAgrupado[]> {
+    if (idRol == null) {
+      throw new UnauthorizedException('El token no incluye un rol asignado.');
+    }
+
+    try {
+      return await this.getPermisosAgrupadosByRolId(idRol);
     } catch (error) {
-      console.error('Error al obtener permisos agrupados:', error);
-      throw error; // Lanzar el error para manejarlo en la capa superior si es necesario
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al obtener permisos agrupados',
+      );
     }
   }
 }

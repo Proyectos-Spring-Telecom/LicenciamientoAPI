@@ -4,17 +4,17 @@ import {
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Usuarios } from './Usuarios';
-import { RolesPermisos } from './RolesPermisos';
+import { Bitacora } from './Bitacora';
+import { Permisos } from './Permisos';
 import { applySchema } from 'src/common/apply-schema.decorator';
 
 @applySchema
-@Entity('Roles')
-export class Roles {
+@Entity('CatModulos')
+export class CatModulos {
   @PrimaryGeneratedColumn({ type: 'bigint', name: 'Id' })
   id: number;
 
-  @Column('varchar', { name: 'Nombre', length: 50 })
+  @Column('varchar', { name: 'Nombre', length: 100 })
   nombre: string;
 
   @Column('tinyint', { name: 'Estatus', default: () => "'1'" })
@@ -33,9 +33,9 @@ export class Roles {
   })
   fechaActualizacion: Date;
 
-  @OneToMany(() => Usuarios, (usuarios) => usuarios.idRol2)
-  usuarios: Usuarios[];
+  @OneToMany(() => Bitacora, (bitacora) => bitacora.idModulo2)
+  bitacoras: Bitacora[];
 
-  @OneToMany(() => RolesPermisos, (rolesPermisos) => rolesPermisos.idRol2)
-  rolesPermisos: RolesPermisos[];
+  @OneToMany(() => Permisos, (permisos) => permisos.idModulo2)
+  permisos: Permisos[];
 }

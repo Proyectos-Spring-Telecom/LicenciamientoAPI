@@ -84,40 +84,38 @@ export class UsuariosController {
     description: 'No autorizado'
   })
   async findAllList(@Request() req): Promise<ApiResponseCommon> {
-    const idCliente = req.user.idCliente;
+    const idGrupo = req.user.idGrupo;
     const rol = req.user.rol;
-    return await this.usuariosService.getAllListUsuarios(+idCliente, +rol);
+    return await this.usuariosService.getAllListUsuarios(+idGrupo, +rol);
   }
 
-  @Get('list/cliente/:id')
+  @Get('list/grupo/:id')
   @ApiOperation({ 
-    summary: 'Obtener usuarios por cliente específico',
-    description: 'Obtiene la lista de usuarios asociados a un cliente específico'
+    summary: 'Obtener usuarios por grupo específico',
+    description: 'Obtiene la lista de usuarios asociados a un grupo específico'
   })
   @ApiParam({
     name: 'id',
     type: 'number',
-    description: 'ID del cliente',
+    description: 'ID del grupo',
     example: 1
   })
   @ApiResponse({ 
     status: 200, 
-    description: 'Lista de usuarios del cliente obtenida exitosamente',
+    description: 'Lista de usuarios del grupo obtenida exitosamente',
   })
   @ApiResponse({ 
     status: 404, 
-    description: 'Cliente no encontrado' 
+    description: 'Grupo no encontrado' 
   })
   @ApiResponse({
     status: 401,
     description: 'No autorizado'
   })
-  async findAllListUsuarioCliente(
+  async findAllListUsuarioGrupo(
     @Param('id', ParseIntPipe) id: number,
-    @Request() req,
   ): Promise<ApiResponseCommon> {
-    const idCliente = req.user.idCliente;
-    return await this.usuariosService.getAllListUsuariosCliente(id, +idCliente);
+    return await this.usuariosService.getAllListUsuariosGrupo(id);
   }
 
   @Get(':page/:limit')
@@ -150,12 +148,12 @@ export class UsuariosController {
     @Param('limit', ParseIntPipe) limit: number,
     @Request() req,
   ): Promise<ApiResponseCommon> {
-    const idCliente = req.user.idCliente;
+    const idGrupo = req.user.idGrupo;
     const rol = req.user.rol;
     const idUser = req.user.userId;
     return await this.usuariosService.getAllUsuario(
       +idUser,
-      +idCliente,
+      +idGrupo,
       +rol,
       page,
       limit,
@@ -189,9 +187,9 @@ export class UsuariosController {
     @Param('id', ParseIntPipe) id: number, 
     @Request() req
   ) {
-    const idCliente = req.user.idCliente;
+    const idGrupo = req.user.idGrupo;
     const rol = req.user.rol;
-    return this.usuariosService.getUsuarioByID(+id, +idCliente, +rol);
+    return this.usuariosService.getUsuarioByID(+id, +idGrupo, +rol);
   }
 
   // ==================== PATCH ====================

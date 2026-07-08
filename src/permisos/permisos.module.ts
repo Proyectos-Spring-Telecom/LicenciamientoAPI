@@ -3,12 +3,12 @@ import { PermisosService } from './permisos.service';
 import { PermisosController } from './permisos.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Permisos } from 'src/entities/Permisos';
+import { RolesPermisos } from 'src/entities/RolesPermisos';
 import { BitacoraModule } from 'src/bitacora/bitacora.module';
-import { UsuariosPermisos } from 'src/entities/UsuariosPermisos';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Permisos, UsuariosPermisos]),
+    TypeOrmModule.forFeature([Permisos, RolesPermisos]),
     BitacoraModule,
   ],
   controllers: [PermisosController],

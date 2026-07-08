@@ -4,23 +4,27 @@ import {
   IsNotEmpty,
   IsOptional,
   IsInt,
-  IsDateString,
   MaxLength,
   MinLength,
   IsIn,
-  IsArray,
-  IsNumber,
   Matches,
+  IsEmail,
 } from 'class-validator';
 
 export class CreateUsuarioDto {
   @IsString()
   @IsNotEmpty({ message: 'El UserName es obligatorio' })
-  @MaxLength(100, {
-    message: 'El UserName no puede exceder los 100 caracteres',
+  @MaxLength(191, {
+    message: 'El UserName no puede exceder los 191 caracteres',
   })
   @ApiProperty({ description: 'Nombre de usuario', example: 'usuario01' })
   userName: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(191)
+  @ApiProperty({ description: 'Correo electrónico', example: 'usuario@ejemplo.com', required: false })
+  email?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El Password es obligatorio' })
@@ -35,17 +39,18 @@ export class CreateUsuarioDto {
   })
   passwordHash: string;
 
+  @IsOptional()
   @IsInt()
   @IsIn([0, 1], { message: 'Solo se permite 0 o 1' })
   @ApiProperty({
     description: 'Confirmación de email (0=No, 1=Sí)',
-    example: 0,
+    example: 1,
   })
-  emailConfirmado: number;
+  emailConfirmed?: number;
 
   @IsNotEmpty()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Nombre del usuario',
     example: 'Juan',
@@ -55,7 +60,7 @@ export class CreateUsuarioDto {
 
   @IsNotEmpty()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Apellido paterno',
     example: 'Pérez',
@@ -65,7 +70,7 @@ export class CreateUsuarioDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @MaxLength(191)
   @ApiProperty({
     description: 'Apellido materno',
     example: 'López',
@@ -75,23 +80,12 @@ export class CreateUsuarioDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(14)
   @ApiProperty({
     description: 'Teléfono',
     example: '5512345678',
     required: false,
   })
-  telefono?: string;
-
-  @IsOptional()
-  @IsDateString()
-  @ApiProperty({ description: 'Actualización de contraseña', required: false })
-  actualizacionPassword?: string;
-
-  @IsOptional()
-  @IsString()
-  @ApiProperty({ description: 'Foto de perfil', required: false })
-  fotoPerfil?: string;
+  phoneNumber?: string;
 
   @IsOptional()
   @IsInt()
@@ -106,13 +100,8 @@ export class CreateUsuarioDto {
   @ApiProperty({ description: 'Rol asignado', example: 2 })
   idRol: number;
 
+  @IsOptional()
   @IsInt()
-  @ApiProperty({ description: 'Cliente asignado', example: 5 })
-  @IsNotEmpty()
-  idCliente: number;
-
-  @IsNotEmpty()
-  @IsArray()
-  @IsNumber({}, { each: true })
-  permisosIds: number[];
+  @ApiProperty({ description: 'Grupo asignado', example: 5 })
+  idGrupo?: number;
 }
