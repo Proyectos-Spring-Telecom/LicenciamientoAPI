@@ -4,7 +4,6 @@ import {
   Body,
   HttpCode,
   UseGuards,
-  Patch,
   Get,
   Request,
 } from '@nestjs/common';
@@ -13,7 +12,6 @@ import { LoginAuthDto } from './dto/login-auth.dto';
 import { LoginAuthConfirmacionDto } from './dto/login-confirmacion.dto';
 import { LoginAuthResetDto } from './dto/login-recuperacion.dto';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
-import { CodigoPasajeroAutenticacion } from './dto/login-autenticacion.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
@@ -28,14 +26,14 @@ export class AuthController {
     return await this.authService.recuperarContrasena(loginAuthConfirmacionDto);
   }
 
-  @Post('recuperar/confirmacion')
-  async recuperacionConfirmacion(
-    @Body() loginAuthConfirmacionDto: LoginAuthConfirmacionDto,
-  ) {
-    return await this.authService.recuperarConfirmacion(
-      loginAuthConfirmacionDto,
-    );
-  }
+  // @Post('recuperar/confirmacion')
+  // async recuperacionConfirmacion(
+  //   @Body() loginAuthConfirmacionDto: LoginAuthConfirmacionDto,
+  // ) {
+  //   return await this.authService.recuperarConfirmacion(
+  //     loginAuthConfirmacionDto,
+  //   );
+  // }
 
   @Post('refresh')
   @HttpCode(200)
@@ -67,11 +65,11 @@ export class AuthController {
     return await this.authService.resetPassword(loginAuthResetDto);
   }
 
-  @Patch('verify')
-  @HttpCode(200)
-  async verifyUser(
-    @Body() codigoPasajeroAutenticacion: CodigoPasajeroAutenticacion,
-  ) {
-    return await this.authService.verifyUser(codigoPasajeroAutenticacion);
-  }
+  // @Patch('verify')
+  // @HttpCode(200)
+  // async verifyUser(
+  //   @Body() codigoPasajeroAutenticacion: CodigoPasajeroAutenticacion,
+  // ) {
+  //   return await this.authService.verifyUser(codigoPasajeroAutenticacion);
+  // }
 }
