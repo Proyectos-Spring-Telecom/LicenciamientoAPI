@@ -282,7 +282,7 @@ export class PermisosService {
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -305,7 +305,7 @@ export class PermisosService {
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );
@@ -334,7 +334,7 @@ export class PermisosService {
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -357,7 +357,7 @@ export class PermisosService {
         'UPDATE',
         querylogger,
         idUser,
-        4,
+        EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );
