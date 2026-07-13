@@ -20,6 +20,7 @@ async function bootstrap() {
     .setDescription('Documentación de la API de Licenciamiento')
     .setVersion('1.0')
     .addServer('http://localhost:3005', 'Servidor Local')
+    .addServer('https://springtelecom.mx/licenciamientoAPI', 'Servidor Remoto')
     .addBearerAuth(
       {
         type: 'http',
@@ -36,6 +37,7 @@ async function bootstrap() {
     .addTag('Mail', 'Servicio de correo electrónico')
     .addTag('Modulos', 'Gestión de módulos del sistema')
     .addTag('Permisos', 'Gestión de permisos')
+    .addTag('Roles', 'Gestión de roles y su relación con permisos')
     .addTag('Usuarios', 'Gestión de usuarios')
     .build();
 

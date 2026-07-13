@@ -11,7 +11,6 @@ import { Repository } from 'typeorm';
 import { Usuarios } from 'src/entities/Usuarios';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
-import { UpdateUsuarioEstatusDto } from './dto/update-usuario-estatus.dto';
 import * as bcrypt from 'bcrypt';
 import {
   ApiCrudResponse,
@@ -491,7 +490,6 @@ ORDER BY u.Id DESC`,
 
   async updateUsuarioEstatus(
     id: number,
-    updateUsuarioEstatusDto: UpdateUsuarioEstatusDto,
     idUser: number,
   ): Promise<ApiCrudResponse> {
     try {
@@ -502,20 +500,13 @@ ORDER BY u.Id DESC`,
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
 
-      const { estatus } = updateUsuarioEstatusDto;
+      const estatus = usuario.estatus === 1 ? 0 : 1;
       await this.usuarioRepository.update(id, { estatus });
 
-      const usuarioResult = await this.usuarioRepository.findOne({
-        where: { id },
-      });
-      if (!usuarioResult) {
-        throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
-      }
-
-      const querylogger = { updateUsuarioEstatusDto };
+      const querylogger = { id, estatus };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
-        `Se cambió el estatus del usuario ${usuarioResult.nombre} con ID: ${id} a estatus: ${estatus}.`,
+        `Se cambió el estatus del usuario ${usuario.nombre} con ID: ${id} a estatus: ${estatus}.`,
         'UPDATE',
         querylogger,
         idUser,
@@ -529,15 +520,14 @@ ORDER BY u.Id DESC`,
         estatus: { estatus },
         data: {
           id,
-          nombre:
-            `${usuarioResult.nombre} ${usuarioResult.apellidoPaterno} ` || '',
+          nombre: `${usuario.nombre} ${usuario.apellidoPaterno} ` || '',
         },
       };
     } catch (error) {
-      const querylogger = { updateUsuarioEstatusDto };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
-        `Se cambió el estatus del usuario con ID: ${id} a estatus: ${updateUsuarioEstatusDto.estatus}.`,
+        `Se cambió el estatus del usuario con ID: ${id}.`,
         'UPDATE',
         querylogger,
         idUser,
