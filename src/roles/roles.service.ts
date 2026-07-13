@@ -19,6 +19,7 @@ import {
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
 import { PermisosService } from 'src/permisos/permisos.service';
+import { EnumModulos } from 'src/common/estatus.enum';
 
 export interface RolCreatedResponse {
   id: number;
@@ -122,7 +123,7 @@ export class RolesService {
         'CREATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -139,7 +140,7 @@ export class RolesService {
         'CREATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );
@@ -281,7 +282,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -294,7 +295,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );
@@ -326,7 +327,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -347,7 +348,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );
@@ -372,7 +373,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.SUCCESS,
       );
 
@@ -392,7 +393,7 @@ export class RolesService {
         'UPDATE',
         querylogger,
         idUser,
-        null,
+        EnumModulos.ROLES,
         EstatusEnumBitcora.ERROR,
         error instanceof Error ? error.message : String(error),
       );

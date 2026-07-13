@@ -10,6 +10,7 @@ export enum TipoCodigoAutenticacion {
 
 export enum EnumModulos {
   MODULOS = 1,
+  ROLES = 2,
   MONITOREO = 9,
   TABLERO = 19,
   LOCALES_COMERCIALES = 20,
