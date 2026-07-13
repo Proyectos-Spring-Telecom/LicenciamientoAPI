@@ -18,7 +18,6 @@ import {
   ApiResponseCommon,
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
-import { UpdateRolEstatusDto } from './dto/update-rol.dto';
 import { PermisosService } from 'src/permisos/permisos.service';
 
 export interface RolCreatedResponse {
@@ -310,7 +309,6 @@ export class RolesService {
   async updateEstatus(
     id: number,
     idUser: number,
-    updateRolEstatusDto: UpdateRolEstatusDto,
   ): Promise<ApiCrudResponse> {
     try {
       const rol = await this.rolesRepository.findOne({
@@ -318,14 +316,13 @@ export class RolesService {
       });
       if (!rol) throw new NotFoundException('Rol no encontrado');
 
-      await this.rolesRepository.update(id, {
-        estatus: updateRolEstatusDto.estatus,
-      });
+      const estatus = rol.estatus === 1 ? 0 : 1;
+      await this.rolesRepository.update(id, { estatus });
 
-      const querylogger = { updateRolEstatusDto };
+      const querylogger = { id, estatus };
       await this.bitacoraLogger.logToBitacora(
         'Roles',
-        `Se actualizo a estatus ${updateRolEstatusDto.estatus} del rol: ${rol.nombre}`,
+        `Se actualizo a estatus ${estatus} del rol: ${rol.nombre}`,
         'UPDATE',
         querylogger,
         idUser,
@@ -336,17 +333,17 @@ export class RolesService {
       return {
         status: 'success',
         message: 'Estatus rol actualizado correctamente',
-        estatus: { estatus: updateRolEstatusDto.estatus },
+        estatus: { estatus },
         data: {
           id,
           nombre: rol.nombre,
         },
       };
     } catch (error) {
-      const querylogger = { updateRolEstatusDto };
+      const querylogger = { id };
       await this.bitacoraLogger.logToBitacora(
         'Roles',
-        `Se actualizo a estatus ${updateRolEstatusDto.estatus} del rol con ID: ${id}`,
+        `Se actualizo el estatus del rol con ID: ${id}`,
         'UPDATE',
         querylogger,
         idUser,

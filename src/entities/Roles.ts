@@ -12,30 +12,30 @@ import { applySchema } from 'src/common/apply-schema.decorator';
 @Entity('Roles')
 export class Roles {
   @PrimaryGeneratedColumn({ type: 'bigint', name: 'Id' })
-  id: number;
+  id!: number;
 
   @Column('varchar', { name: 'Nombre', length: 50 })
-  nombre: string;
+  nombre!: string;
 
   @Column('tinyint', { name: 'Estatus', default: () => "'1'" })
-  estatus: number;
+  estatus!: number;
 
   @Column('datetime', {
     name: 'FechaCreacion',
     default: () => 'CURRENT_TIMESTAMP',
   })
-  fechaCreacion: Date;
+  fechaCreacion!: Date;
 
   @Column('datetime', {
     name: 'FechaActualizacion',
     default: () => 'CURRENT_TIMESTAMP',
     onUpdate: 'CURRENT_TIMESTAMP',
   })
-  fechaActualizacion: Date;
+  fechaActualizacion!: Date;
 
   @OneToMany(() => Usuarios, (usuarios) => usuarios.idRol2)
-  usuarios: Usuarios[];
+  usuarios!: Usuarios[];
 
   @OneToMany(() => RolesPermisos, (rolesPermisos) => rolesPermisos.idRol2)
-  rolesPermisos: RolesPermisos[];
+  rolesPermisos!: RolesPermisos[];
 }

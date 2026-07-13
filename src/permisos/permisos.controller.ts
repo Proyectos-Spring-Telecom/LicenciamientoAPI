@@ -19,7 +19,7 @@ import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { ApiCrudResponse, ApiResponseCommon } from 'src/common/ApiResponse';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Permisos')
 @ApiBearerAuth('bearer-token')
@@ -74,6 +74,20 @@ export class PermisosController {
   }
 
   @Patch(':id/estatus')
+  @ApiOperation({
+    summary: 'Alternar estatus del permiso',
+    description:
+      'Alterna el estatus del permiso (1↔0). No requiere body.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: 'number',
+    description: 'ID del permiso',
+    example: 1,
+  })
+  @ApiResponse({ status: 200, description: 'Estatus actualizado exitosamente' })
+  @ApiResponse({ status: 404, description: 'Permiso no encontrado' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
   async updatePermisoEstatus(
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
@@ -81,11 +95,11 @@ export class PermisosController {
     const idUser = req.user.userId;
     return await this.permisosService.updateEstatus(id, idUser);
   }
-
-  @Delete(':id')
-  @Roles(1) // Solo SuperAdministrador puede eliminar permisos
-  remove(@Param('id') id: string, @Request() req): Promise<ApiCrudResponse> {
-    const idUser = req.user.userId;
-    return this.permisosService.remove(+id, idUser);
-  }
+  /* 
+    @Delete(':id')
+    @Roles(1) // Solo SuperAdministrador puede eliminar permisos
+    remove(@Param('id') id: string, @Request() req): Promise<ApiCrudResponse> {
+      const idUser = req.user.userId;
+      return this.permisosService.remove(+id, idUser);
+    } */
 }

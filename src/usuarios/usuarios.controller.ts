@@ -22,7 +22,6 @@ import {
 import { UsuariosService } from './usuarios.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
-import { UpdateUsuarioEstatusDto } from './dto/update-usuario-estatus.dto';
 import { UpdateUsuarioContrasena } from './dto/update-usuario-contrasena.dto';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
@@ -35,7 +34,7 @@ import { ApiResponseCommon, ApiCrudResponse } from 'src/common/ApiResponse';
 @Roles() // Todos los roles pueden acceder por defecto
 @Controller('usuarios')
 export class UsuariosController {
-  constructor(private readonly usuariosService: UsuariosService) {}
+  constructor(private readonly usuariosService: UsuariosService) { }
 
   // ==================== POST ====================
 
@@ -93,12 +92,12 @@ export class UsuariosController {
   // ==================== GET ====================
 
   @Get('list')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener lista completa de usuarios',
     description: 'Obtiene todos los usuarios sin paginación según el rol del usuario autenticado'
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Lista completa de usuarios obtenida exitosamente',
   })
   @ApiResponse({
@@ -112,7 +111,7 @@ export class UsuariosController {
   }
 
   @Get('list/grupo/:id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener usuarios por grupo específico',
     description: 'Obtiene la lista de usuarios asociados a un grupo específico'
   })
@@ -122,13 +121,13 @@ export class UsuariosController {
     description: 'ID del grupo',
     example: 1
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Lista de usuarios del grupo obtenida exitosamente',
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Grupo no encontrado' 
+  @ApiResponse({
+    status: 404,
+    description: 'Grupo no encontrado'
   })
   @ApiResponse({
     status: 401,
@@ -141,7 +140,7 @@ export class UsuariosController {
   }
 
   @Get(':page/:limit')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener usuarios con paginación',
     description: 'Obtiene una lista paginada de usuarios según los parámetros especificados'
   })
@@ -157,8 +156,8 @@ export class UsuariosController {
     description: 'Cantidad de registros por página',
     example: 10
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Usuarios obtenidos exitosamente con paginación',
   })
   @ApiResponse({
@@ -183,7 +182,7 @@ export class UsuariosController {
   }
 
   @Get(':id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Obtener usuario por ID',
     description: 'Obtiene la información del usuario. Los permisos se gestionan por rol (RolesPermisos), no por usuario.'
   })
@@ -193,20 +192,20 @@ export class UsuariosController {
     description: 'ID del usuario',
     example: 1
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Usuario encontrado exitosamente'
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Usuario no encontrado' 
+  @ApiResponse({
+    status: 404,
+    description: 'Usuario no encontrado'
   })
   @ApiResponse({
     status: 401,
     description: 'No autorizado'
   })
   async findOne(
-    @Param('id', ParseIntPipe) id: number, 
+    @Param('id', ParseIntPipe) id: number,
     @Request() req
   ) {
     const idGrupo = req.user.idGrupo;
@@ -217,44 +216,39 @@ export class UsuariosController {
   // ==================== PATCH ====================
 
   @Patch('estatus/:id')
-  @ApiOperation({ 
-    summary: 'Cambiar estatus del usuario',
-    description: 'Actualiza el estatus de un usuario (activar/desactivar)'
+  @ApiOperation({
+    summary: 'Alternar estatus del usuario',
+    description:
+      'Alterna el estatus del usuario (1↔0). No requiere body.',
   })
   @ApiParam({
     name: 'id',
     type: 'number',
     description: 'ID del usuario',
-    example: 1
+    example: 1,
   })
-  @ApiBody({ type: UpdateUsuarioEstatusDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Estatus actualizado exitosamente',
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Usuario no encontrado' 
+  @ApiResponse({
+    status: 404,
+    description: 'Usuario no encontrado',
   })
   @ApiResponse({
     status: 401,
-    description: 'No autorizado'
+    description: 'No autorizado',
   })
   async changeUsuarioEstatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateUsuarioEstatusDto: UpdateUsuarioEstatusDto,
     @Request() req,
   ): Promise<ApiCrudResponse> {
     const idUser = req.user.userId;
-    return await this.usuariosService.updateUsuarioEstatus(
-      id,
-      updateUsuarioEstatusDto,
-      idUser,
-    );
+    return await this.usuariosService.updateUsuarioEstatus(id, idUser);
   }
 
   @Patch('actualizar/contrasena/:id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Cambiar contraseña de usuario',
     description: 'Actualiza la contraseña de un usuario específico'
   })
@@ -269,13 +263,13 @@ export class UsuariosController {
     status: 200,
     description: 'Contraseña actualizada exitosamente',
   })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'Contraseña inválida' 
+  @ApiResponse({
+    status: 400,
+    description: 'Contraseña inválida'
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Usuario no encontrado' 
+  @ApiResponse({
+    status: 404,
+    description: 'Usuario no encontrado'
   })
   @ApiResponse({
     status: 401,
@@ -351,44 +345,44 @@ export class UsuariosController {
   }
 
   // ==================== DELETE ====================
-
-  @Delete(':id')
-  @Roles(1) // Solo SuperAdministrador puede eliminar usuarios
-  @ApiOperation({ 
-    summary: 'Eliminar usuario',
-    description: 'Elimina un usuario del sistema'
-  })
-  @ApiParam({
-    name: 'id',
-    type: 'number',
-    description: 'ID del usuario a eliminar',
-    example: 1
-  })
-  @ApiResponse({ 
-    status: 200, 
-    description: 'Usuario eliminado exitosamente',
-  })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Usuario no encontrado' 
-  })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'No se puede eliminar el usuario' 
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado'
-  })
-  @ApiResponse({
-    status: 403,
-    description: 'Acceso denegado - Solo SuperAdministrador puede eliminar usuarios'
-  })
-  async deleteUsuario(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req,
-  ): Promise<ApiCrudResponse> {
-    const idUser = req.user.userId;
-    return await this.usuariosService.deleteUsuario(id, idUser);
-  }
+  /* 
+    @Delete(':id')
+    @Roles(1) // Solo SuperAdministrador puede eliminar usuarios
+    @ApiOperation({ 
+      summary: 'Eliminar usuario',
+      description: 'Elimina un usuario del sistema'
+    })
+    @ApiParam({
+      name: 'id',
+      type: 'number',
+      description: 'ID del usuario a eliminar',
+      example: 1
+    })
+    @ApiResponse({ 
+      status: 200, 
+      description: 'Usuario eliminado exitosamente',
+    })
+    @ApiResponse({ 
+      status: 404, 
+      description: 'Usuario no encontrado' 
+    })
+    @ApiResponse({ 
+      status: 400, 
+      description: 'No se puede eliminar el usuario' 
+    })
+    @ApiResponse({
+      status: 401,
+      description: 'No autorizado'
+    })
+    @ApiResponse({
+      status: 403,
+      description: 'Acceso denegado - Solo SuperAdministrador puede eliminar usuarios'
+    })
+    async deleteUsuario(
+      @Param('id', ParseIntPipe) id: number,
+      @Request() req,
+    ): Promise<ApiCrudResponse> {
+      const idUser = req.user.userId;
+      return await this.usuariosService.deleteUsuario(id, idUser);
+    } */
 }
