@@ -6,10 +6,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CreateRolDto } from './dto/create-rol.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
+import { UpdateRolDto } from './dto/update-role.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { Roles } from 'src/entities/Roles';
+import { RolesPermisos } from 'src/entities/RolesPermisos';
+import { Permisos } from 'src/entities/Permisos';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import {
   ApiCrudResponse,
@@ -17,19 +19,72 @@ import {
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
 import { UpdateRolEstatusDto } from './dto/update-rol.dto';
+import { PermisosService } from 'src/permisos/permisos.service';
+
+export interface RolCreatedResponse {
+  id: number;
+  nombre: string;
+  estatus: number;
+}
 
 @Injectable()
 export class RolesService {
   constructor(
     @InjectRepository(Roles)
     private readonly rolesRepository: Repository<Roles>,
+    @InjectRepository(Permisos)
+    private readonly permisosRepository: Repository<Permisos>,
     private readonly bitacoraLogger: BitacoraLoggerService,
+    private readonly permisosService: PermisosService,
+    private readonly dataSource: DataSource,
   ) {}
+
+  private async validatePermisosIds(permisoIds: number[]): Promise<void> {
+    const uniqueIds = [...new Set(permisoIds)];
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    const count = await this.permisosRepository.count({
+      where: { id: In(uniqueIds) },
+    });
+
+    if (count !== uniqueIds.length) {
+      throw new BadRequestException('Los permisos son inválidos');
+    }
+  }
+
+  private async syncRolesPermisos(
+    idRol: number,
+    permisoIds: number[],
+    manager = this.dataSource.manager,
+  ): Promise<void> {
+    const uniquePermisos = [...new Set(permisoIds)];
+    const current = await manager.find(RolesPermisos, {
+      where: { idRol },
+    });
+    const currentIds = current
+      .map((item) => Number(item.idPermiso))
+      .filter((id) => !Number.isNaN(id));
+
+    const toRemove = current.filter(
+      (item) => !uniquePermisos.includes(Number(item.idPermiso)),
+    );
+    const toAdd = uniquePermisos.filter((id) => !currentIds.includes(id));
+
+    if (toRemove.length > 0) {
+      await manager.remove(RolesPermisos, toRemove);
+    }
+
+    for (const idPermiso of toAdd) {
+      await manager.save(RolesPermisos, { idRol, idPermiso });
+    }
+  }
 
   async create(
     idUser: number,
     createRoleDto: CreateRolDto,
-  ): Promise<ApiCrudResponse> {
+  ): Promise<RolCreatedResponse> {
     try {
       const existente = await this.rolesRepository.find({
         where: { nombre: createRoleDto.nombre },
@@ -38,11 +93,28 @@ export class RolesService {
         throw new BadRequestException('El rol ya existe');
       }
 
-      const newRol = this.rolesRepository.create({
-        ...createRoleDto,
-        estatus: createRoleDto.estatus ?? 1,
+      if (createRoleDto.permisos?.length) {
+        await this.validatePermisosIds(createRoleDto.permisos);
+      }
+
+      const rolSave = await this.dataSource.transaction(async (manager) => {
+        const rol = await manager.save(Roles, {
+          nombre: createRoleDto.nombre,
+          estatus: 1,
+        });
+
+        if (createRoleDto.permisos?.length) {
+          const uniquePermisos = [...new Set(createRoleDto.permisos)];
+          for (const idPermiso of uniquePermisos) {
+            await manager.save(RolesPermisos, {
+              idRol: rol.id,
+              idPermiso,
+            });
+          }
+        }
+
+        return rol;
       });
-      const rolSave = await this.rolesRepository.save(newRol);
 
       const querylogger = { createRoleDto };
       await this.bitacoraLogger.logToBitacora(
@@ -56,12 +128,9 @@ export class RolesService {
       );
 
       return {
-        status: 'success',
-        message: 'Rol creado correctamente',
-        data: {
-          id: Number(rolSave.id),
-          nombre: rolSave.nombre,
-        },
+        id: Number(rolSave.id),
+        nombre: rolSave.nombre,
+        estatus: rolSave.estatus,
       };
     } catch (error) {
       const querylogger = { createRoleDto };
@@ -73,15 +142,12 @@ export class RolesService {
         idUser,
         null,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException({
-        message: 'Error al crear rol',
-        error,
-      });
+      throw new InternalServerErrorException('Error al crear rol');
     }
   }
 
@@ -162,10 +228,13 @@ export class RolesService {
       });
       if (!rol) throw new NotFoundException('Rol no encontrado');
 
+      const permisos = await this.permisosService.getPermisosAgrupadosByRolId(id);
+
       return {
         data: {
           ...rol,
           id: Number(rol.id),
+          permisos,
         },
       };
     } catch (error) {
@@ -177,20 +246,39 @@ export class RolesService {
   }
 
   async update(
-    id: number,
     idUser: number,
-    updateRoleDto: UpdateRoleDto,
-  ): Promise<ApiCrudResponse> {
+    updateRolDto: UpdateRolDto,
+  ): Promise<string> {
     try {
-      const rol = await this.rolesRepository.findOne({ where: { id } });
-      if (!rol) throw new NotFoundException('Rol no encontrado');
+      const rol = await this.rolesRepository.findOne({
+        where: { id: updateRolDto.id },
+      });
+      if (!rol) {
+        throw new BadRequestException('Rol no encontrado');
+      }
 
-      await this.rolesRepository.update(id, updateRoleDto);
+      if (updateRolDto.permisos !== undefined) {
+        await this.validatePermisosIds(updateRolDto.permisos);
+      }
 
-      const querylogger = { updateRoleDto };
+      await this.dataSource.transaction(async (manager) => {
+        await manager.update(Roles, updateRolDto.id, {
+          nombre: updateRolDto.nombre,
+        });
+
+        if (updateRolDto.permisos !== undefined) {
+          await this.syncRolesPermisos(
+            updateRolDto.id,
+            updateRolDto.permisos,
+            manager,
+          );
+        }
+      });
+
+      const querylogger = { updateRolDto };
       await this.bitacoraLogger.logToBitacora(
         'Roles',
-        `Se actualizo el rol: ${updateRoleDto?.nombre ?? rol.nombre}`,
+        `Se actualizo el rol: ${updateRolDto.nombre}`,
         'UPDATE',
         querylogger,
         idUser,
@@ -198,34 +286,24 @@ export class RolesService {
         EstatusEnumBitcora.SUCCESS,
       );
 
-      return {
-        status: 'success',
-        message: 'Rol actualizado correctamente',
-        data: {
-          id,
-          nombre: updateRoleDto?.nombre ?? rol.nombre,
-        },
-      };
+      return 'Rol actualizado';
     } catch (error) {
-      const querylogger = { updateRoleDto };
+      const querylogger = { updateRolDto };
       await this.bitacoraLogger.logToBitacora(
         'Roles',
-        `Se actualizo el rol: ${updateRoleDto?.nombre}`,
+        `Se actualizo el rol: ${updateRolDto.nombre}`,
         'UPDATE',
         querylogger,
         idUser,
         null,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException({
-        message: 'Error al actualizar rol',
-        error,
-      });
+      throw new InternalServerErrorException('Error al actualizar rol');
     }
   }
 
@@ -274,15 +352,12 @@ export class RolesService {
         idUser,
         null,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException({
-        message: 'Error al cambiar estatus rol',
-        error,
-      });
+      throw new InternalServerErrorException('Error al cambiar estatus rol');
     }
   }
 
@@ -322,16 +397,13 @@ export class RolesService {
         idUser,
         null,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
         throw error;
       }
-      throw new InternalServerErrorException({
-        message: 'Error al eliminar rol',
-        error,
-      });
+      throw new InternalServerErrorException('Error al eliminar rol');
     }
   }
 }

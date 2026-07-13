@@ -24,44 +24,14 @@ export class Usuarios {
   @Column('varchar', { name: 'UserName', nullable: true, length: 191 })
   userName: string | null;
 
-  @Column('varchar', { name: 'NormalizedUserName', nullable: true, length: 191 })
-  normalizedUserName: string | null;
-
-  @Column('varchar', { name: 'Email', nullable: true, length: 191 })
-  email: string | null;
-
-  @Column('varchar', { name: 'NormalizedEmail', nullable: true, length: 191 })
-  normalizedEmail: string | null;
-
   @Column('tinyint', { name: 'EmailConfirmed', default: () => "'0'" })
   emailConfirmed: number;
 
   @Column('longtext', { name: 'PasswordHash', nullable: true })
   passwordHash: string | null;
 
-  @Column('longtext', { name: 'SecurityStamp', nullable: true })
-  securityStamp: string | null;
-
-  @Column('longtext', { name: 'ConcurrencyStamp', nullable: true })
-  concurrencyStamp: string | null;
-
   @Column('longtext', { name: 'PhoneNumber', nullable: true })
   phoneNumber: string | null;
-
-  @Column('tinyint', { name: 'PhoneNumberConfirmed', default: () => "'0'" })
-  phoneNumberConfirmed: number;
-
-  @Column('tinyint', { name: 'TwoFactorEnabled', default: () => "'0'" })
-  twoFactorEnabled: number;
-
-  @Column('datetime', { name: 'LockoutEnd', precision: 6, nullable: true })
-  lockoutEnd: Date | null;
-
-  @Column('tinyint', { name: 'LockoutEnabled', default: () => "'0'" })
-  lockoutEnabled: number;
-
-  @Column('int', { name: 'AccessFailedCount', default: () => "'0'" })
-  accessFailedCount: number;
 
   @Column('smallint', { name: 'Estatus', default: () => "'1'" })
   estatus: number;
@@ -72,6 +42,9 @@ export class Usuarios {
   @Column('bigint', { name: 'IdRol', nullable: true })
   idRol: number | null;
 
+  @Column('bigint', { name: 'IdGrupo', nullable: true })
+  idGrupo: number | null;
+
   @Column('varchar', { name: 'Nombre', nullable: true, length: 191 })
   nombre: string | null;
 
@@ -80,9 +53,6 @@ export class Usuarios {
 
   @Column('varchar', { name: 'ApellidoMaterno', nullable: true, length: 191 })
   apellidoMaterno: string | null;
-
-  @Column('bigint', { name: 'IdGrupo', nullable: true })
-  idGrupo: number | null;
 
   @Column('datetime', {
     name: 'FechaCreacion',
@@ -107,13 +77,25 @@ export class Usuarios {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdRol', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdRol',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Usuarios_Roles',
+    },
+  ])
   idRol2: Roles;
 
   @ManyToOne(() => Grupos, (grupos) => grupos.usuarios, {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdGrupo', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdGrupo',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Usuarios_Grupos',
+    },
+  ])
   idGrupo2: Grupos;
 }

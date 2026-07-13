@@ -286,7 +286,7 @@ Muchas gracias por su preferencia.`;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al registrar pasajero.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -315,7 +315,7 @@ Muchas gracias por su preferencia.`;
         expiresIn: `${process.env.JWT_CONFIRMACION}`,
       });
       const name = `${user.nombre} ${user.apellidoPaterno} ${user.apellidoMaterno}`;
-      const emailDestino = user.email ?? user.userName;
+      const emailDestino = user.userName;
       if (!emailDestino) {
         throw new BadRequestException('El usuario no tiene correo registrado.');
       }
@@ -332,7 +332,7 @@ Muchas gracias por su preferencia.`;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al recuperar contraseña del usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -396,7 +396,7 @@ Muchas gracias por su preferencia.`;
         expiresIn: `${process.env.JWT_CONFIRMACION}`,
       });
       const name = `${user.nombre} ${user.apellidoPaterno} ${user.apellidoMaterno}`;
-      const emailDestino = user.email ?? user.userName;
+      const emailDestino = user.userName;
       if (!emailDestino) {
         throw new BadRequestException('El usuario no tiene correo registrado.');
       }
@@ -413,7 +413,7 @@ Muchas gracias por su preferencia.`;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al confirmar el usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -449,7 +449,7 @@ Muchas gracias por su preferencia.`;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al actualizar contraseña del usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }

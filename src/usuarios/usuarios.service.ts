@@ -22,7 +22,7 @@ import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import { UpdateUsuarioContrasena } from './dto/update-usuario-contrasena.dto';
 import { MailService } from 'src/mail/mail.service';
 import { JwtService } from '@nestjs/jwt';
-import { EnumModulos, EstatusEnum } from 'src/common/estatus.enum';
+import { EnumModulos } from 'src/common/estatus.enum';
 import { AuthService } from 'src/auth/auth.service';
 
 @Injectable()
@@ -31,7 +31,6 @@ export class UsuariosService {
 SELECT
   u.Id AS Id,
   u.UserName AS UserName,
-  u.Email AS Email,
   u.Nombre AS Nombre,
   u.ApellidoPaterno AS ApellidoPaterno,
   u.ApellidoMaterno AS ApellidoMaterno,
@@ -39,9 +38,9 @@ SELECT
   u.FechaCreacion AS FechaCreacion,
   u.FechaActualizacion AS FechaActualizacion,
   u.Estatus AS estatus,
+  u.EmailConfirmed AS EmailConfirmed,
   u.IdRol AS IdRol,
   r.Nombre AS RolNombre,
-  r.Descripcion AS RolDescripcion,
   u.IdGrupo AS IdGrupo
 FROM Usuarios u
 INNER JOIN Roles r ON u.IdRol = r.Id`;
@@ -50,7 +49,6 @@ INNER JOIN Roles r ON u.IdRol = r.Id`;
 SELECT
   u.Id AS id,
   u.UserName AS userName,
-  u.Email AS email,
   u.Nombre AS nombre,
   u.ApellidoPaterno AS apellidoPaterno,
   u.ApellidoMaterno AS apellidoMaterno,
@@ -58,9 +56,9 @@ SELECT
   u.FechaCreacion AS fechaCreacion,
   u.FechaActualizacion AS fechaActualizacion,
   u.Estatus AS estatus,
+  u.EmailConfirmed AS emailConfirmed,
   u.IdRol AS idRol,
   r.Nombre AS rolNombre,
-  r.Descripcion AS rolDescripcion,
   u.IdGrupo AS idGrupo
 FROM Usuarios u
 INNER JOIN Roles r ON u.IdRol = r.Id`;
@@ -136,7 +134,7 @@ WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?`,
     } catch (error) {
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al obtener la paginación de usuarios.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -172,7 +170,7 @@ ORDER BY u.Id DESC;`,
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al obtener el listado de usuarios.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -199,7 +197,7 @@ ORDER BY u.Id DESC;`,
       throw new InternalServerErrorException({
         message:
           'Se produjo un error al intentar obtener los usuarios asociados al grupo.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -235,28 +233,14 @@ ORDER BY u.Id DESC`,
         idGrupo: item.idGrupo != null ? Number(item.idGrupo) : null,
       }));
 
-      const permisoRows = usuario[0].idRol
-        ? await this.usuarioRepository.query(
-            `SELECT rp.IdPermiso AS idPermiso
-             FROM RolesPermisos rp
-             INNER JOIN Permisos p ON p.Id = rp.IdPermiso
-             WHERE rp.IdRol = ? AND p.Estatus = 1`,
-            [usuario[0].idRol],
-          )
-        : [];
-
-      const permiso = permisoRows.map((item: { idPermiso: number }) => ({
-        idPermiso: Number(item.idPermiso),
-      }));
-
-      return { data: { usuario, permiso } };
+      return { data: { usuario } };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al obtener al usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -266,28 +250,43 @@ ORDER BY u.Id DESC`,
     idUser: string,
   ): Promise<ApiCrudResponse> {
     try {
-      const existUsuario = await this.usuarioRepository.findOne({
-        where: { userName: createUsuarioDto.userName },
-      });
-      if (existUsuario) {
-        throw new BadRequestException('El usuario ya se encuentra registrado.');
+      if (createUsuarioDto.password !== createUsuarioDto.confirmPassword) {
+        throw new BadRequestException('Las contraseñas no coinciden.');
       }
 
-      const hashedPassword = await bcrypt.hash(
-        createUsuarioDto.passwordHash,
-        10,
-      );
-      createUsuarioDto.passwordHash = hashedPassword;
+      const existUsuario = await this.usuarioRepository.findOne({
+        where: { userName: createUsuarioDto.correo },
+      });
+      if (existUsuario) {
+        throw new BadRequestException('El correo ya se encuentra registrado.');
+      }
+
+      const hashedPassword = await bcrypt.hash(createUsuarioDto.password, 10);
 
       const newUser = this.usuarioRepository.create({
-        ...createUsuarioDto,
+        nombre: createUsuarioDto.nombre,
+        apellidoPaterno: createUsuarioDto.apellidoPaterno,
+        apellidoMaterno: createUsuarioDto.apellidoMaterno,
+        userName: createUsuarioDto.correo,
+        passwordHash: hashedPassword,
+        idRol: createUsuarioDto.idRol,
+        idGrupo: createUsuarioDto.idGrupo,
         emailConfirmed: createUsuarioDto.emailConfirmed ?? 1,
         estatus: createUsuarioDto.estatus ?? 1,
       });
 
       const userSave = await this.usuarioRepository.save(newUser);
 
-      const querylogger = { createUsuarioDto };
+      const querylogger = {
+        nombre: createUsuarioDto.nombre,
+        apellidoPaterno: createUsuarioDto.apellidoPaterno,
+        apellidoMaterno: createUsuarioDto.apellidoMaterno,
+        correo: createUsuarioDto.correo,
+        idRol: createUsuarioDto.idRol,
+        idGrupo: createUsuarioDto.idGrupo,
+        emailConfirmed: createUsuarioDto.emailConfirmed ?? 1,
+        estatus: createUsuarioDto.estatus ?? 1,
+      };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
         `Se ha creado un usuario con nombre: ${createUsuarioDto.nombre}.`,
@@ -320,14 +319,14 @@ ORDER BY u.Id DESC`,
         Number(idUser),
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al intentar crear el usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -404,14 +403,14 @@ ORDER BY u.Id DESC`,
         Number(idUser),
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
         message: 'Error al actualizar la contraseña.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -429,9 +428,13 @@ ORDER BY u.Id DESC`,
         throw new NotFoundException(`No se encontró un usuario con ID: ${id}.`);
       }
 
-      updateUsuarioDto.emailConfirmed = EstatusEnum.ACTIVO;
-
-      await this.usuarioRepository.update(id, updateUsuarioDto);
+      await this.usuarioRepository.update(id, {
+        nombre: updateUsuarioDto.nombre,
+        apellidoPaterno: updateUsuarioDto.apellidoPaterno,
+        apellidoMaterno: updateUsuarioDto.apellidoMaterno,
+        idRol: updateUsuarioDto.idRol,
+        idGrupo: updateUsuarioDto.idGrupo,
+      });
 
       const newUser = await this.usuarioRepository.findOne({
         where: { id },
@@ -473,7 +476,7 @@ ORDER BY u.Id DESC`,
         Number(idUser),
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -481,7 +484,7 @@ ORDER BY u.Id DESC`,
       }
       throw new InternalServerErrorException({
         message: 'Error al actualizar el usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -540,7 +543,7 @@ ORDER BY u.Id DESC`,
         idUser,
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -548,7 +551,7 @@ ORDER BY u.Id DESC`,
       }
       throw new InternalServerErrorException({
         message: 'No se pudo actualizar el estatus del usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -593,14 +596,14 @@ ORDER BY u.Id DESC`,
         Number(idUser),
         EnumModulos.USUARIOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
         message: 'Hubo un problema al intentar eliminar el usuario.',
-        error: error.message,
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }

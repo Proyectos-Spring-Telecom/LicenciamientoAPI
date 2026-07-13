@@ -16,7 +16,7 @@ const { error, value } = envsSchema.validate( process.env );
 
 
 if ( error ) {
-  throw new Error(`Config validation error: ${ error.message }`);
+  throw new Error(`Config validation error: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 const envVars:EnvVars = value;

@@ -61,7 +61,7 @@ export class PermisosService {
   private mapPermisoListItem(permiso: Permisos): PermisoListItem {
     const nombrePermiso =
       permiso.nombre != null && permiso.nombre.trim() !== '' &&
-      !Number.isNaN(Number(permiso.nombre))
+        !Number.isNaN(Number(permiso.nombre))
         ? Number(permiso.nombre)
         : permiso.nombre;
 
@@ -115,8 +115,7 @@ export class PermisosService {
         throw error;
       }
       throw new InternalServerErrorException(
-        `Error al obtener todos los permisos:`,
-        error,
+        `Error al obtener todos los permisos: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -191,7 +190,7 @@ export class PermisosService {
         Number(idUsuario),
         EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -244,7 +243,7 @@ export class PermisosService {
         idUser,
         EnumModulos.PERMISOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -308,9 +307,13 @@ export class PermisosService {
         idUser,
         4,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
-      return error;
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Error al actualizar permiso');
     }
   }
 
@@ -356,7 +359,7 @@ export class PermisosService {
         idUser,
         4,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
       if (error instanceof HttpException) {
         throw error;
@@ -396,7 +399,7 @@ export class PermisosService {
     }, []);
   }
 
-  private async getPermisosAgrupadosByRolId(
+  async getPermisosAgrupadosByRolId(
     idRol: number,
   ): Promise<ModuloAgrupado[]> {
     const rolesPermisos = this.qualifiedTable('RolesPermisos');

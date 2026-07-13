@@ -13,5 +13,6 @@ import { BitacoraModule } from 'src/bitacora/bitacora.module';
   ],
   controllers: [PermisosController],
   providers: [PermisosService],
+  exports: [PermisosService],
 })
 export class PermisosModule {}

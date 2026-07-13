@@ -10,11 +10,12 @@ import {
   Request,
   Put,
   UseGuards,
+  HttpCode,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { CreateRolDto } from './dto/create-rol.dto';
-import { UpdateRoleDto } from './dto/update-role.dto';
-import { ApiCrudResponse, ApiResponseCommon } from 'src/common/ApiResponse';
+import { UpdateRolDto } from './dto/update-role.dto';
+import { ApiResponseCommon } from 'src/common/ApiResponse';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -24,13 +25,13 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 @ApiTags('Roles')
 @ApiBearerAuth('bearer-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(1, 2, 3)
+@Roles(4)
 @Controller('roles')
 export class RolesController {
-  constructor(private readonly rolesService: RolesService) {}
+  constructor(private readonly rolesService: RolesService) { }
 
   @Post()
-  @Roles(1)
+  @HttpCode(201)
   create(@Body() createRoleDto: CreateRolDto, @Request() req) {
     const idUser = req.user.userId;
     return this.rolesService.create(idUser, createRoleDto);
@@ -57,14 +58,11 @@ export class RolesController {
     return this.rolesService.findOne(id);
   }
 
-  @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() updateRoleDto: UpdateRoleDto,
-    @Request() req,
-  ) {
+  @Put()
+  @HttpCode(200)
+  update(@Body() updateRolDto: UpdateRolDto, @Request() req) {
     const idUser = req.user.userId;
-    return this.rolesService.update(id, idUser, updateRoleDto);
+    return this.rolesService.update(idUser, updateRolDto);
   }
 
   @Patch('estatus/:id')
@@ -72,7 +70,7 @@ export class RolesController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
     @Body() updateRolEstatusDto: UpdateRolEstatusDto,
-  ): Promise<ApiCrudResponse> {
+  ) {
     const idUser = req.user.userId;
     return await this.rolesService.updateEstatus(
       id,
@@ -82,7 +80,7 @@ export class RolesController {
   }
 
   @Delete(':id')
-  @Roles(1)
+  @Roles(4)
   remove(@Param('id', ParseIntPipe) id: number, @Request() req) {
     const idUser = req.user.userId;
     return this.rolesService.remove(id, idUser);
