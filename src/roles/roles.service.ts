@@ -36,7 +36,7 @@ export class RolesService {
     private readonly bitacoraLogger: BitacoraLoggerService,
     private readonly permisosService: PermisosService,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   private async validatePermisosIds(permisoIds: number[]): Promise<void> {
     const uniqueIds = [...new Set(permisoIds)];

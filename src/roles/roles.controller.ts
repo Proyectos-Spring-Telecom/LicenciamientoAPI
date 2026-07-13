@@ -33,7 +33,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 @Roles(4)
 @Controller('roles')
 export class RolesController {
-  constructor(private readonly rolesService: RolesService) {}
+  constructor(private readonly rolesService: RolesService) { }
 
   @Post()
   @HttpCode(201)
