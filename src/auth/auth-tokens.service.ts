@@ -22,7 +22,7 @@ export class AuthTokensService {
   buildAccessPayload(user: Usuarios): AccessTokenPayload {
     return {
       id: Number(user.id),
-      email: user.userName ?? user.email ?? '',
+      email: user.userName ?? '',
       idGrupo: user.idGrupo != null ? Number(user.idGrupo) : null,
       rol: user.idRol != null ? Number(user.idRol) : null,
       type: 'access',

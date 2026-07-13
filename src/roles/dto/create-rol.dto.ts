@@ -1,26 +1,31 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsString,
-  IsNotEmpty,
-  MaxLength,
-  IsOptional,
+  IsArray,
   IsInt,
-  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateRolDto {
   @IsString()
   @IsNotEmpty({ message: 'El nombre es obligatorio' })
-  @MaxLength(50, { message: 'El nombre no puede exceder 50 caracteres' })
+  @MaxLength(35, { message: 'El nombre no puede exceder 35 caracteres' })
   @ApiProperty({
     description: 'Nombre del rol',
     example: 'Administrador',
+    maxLength: 35,
   })
   nombre: string;
 
   @IsOptional()
-  @IsInt({ message: 'Estatus debe ser 0 ó 1' })
-  @IsIn([0, 1], { message: 'Solo puede ser 0 ó 1' })
-  @ApiProperty({ description: 'Estatus del rol (1 activo, 0 inactivo)', example: 1 })
-  estatus?: number = 1;
+  @IsArray({ message: 'permisos debe ser un arreglo' })
+  @IsInt({ each: true, message: 'Cada permiso debe ser un número entero' })
+  @ApiPropertyOptional({
+    description: 'IDs de permisos existentes en Permisos',
+    example: [1, 2, 5],
+    type: [Number],
+  })
+  permisos?: number[];
 }

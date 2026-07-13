@@ -19,7 +19,7 @@ async function bootstrap() {
     .setTitle('Licenciamiento')
     .setDescription('Documentación de la API de Licenciamiento')
     .setVersion('1.0')
-    .addServer('http://localhost:3010', 'Servidor Local')
+    .addServer('http://localhost:3005', 'Servidor Local')
     .addBearerAuth(
       {
         type: 'http',

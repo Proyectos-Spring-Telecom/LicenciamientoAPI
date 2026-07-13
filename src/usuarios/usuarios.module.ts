@@ -5,7 +5,6 @@ import { UsuariosController } from './usuarios.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Usuarios } from 'src/entities/Usuarios';
 import { BitacoraModule } from 'src/bitacora/bitacora.module';
-import { PermisosModule } from 'src/permisos/permisos.module';
 import { MailModule } from 'src/mail/mail.module';
 import { AuthModule } from 'src/auth/auth.module';
 
@@ -13,7 +12,6 @@ import { AuthModule } from 'src/auth/auth.module';
   imports: [
     TypeOrmModule.forFeature([Usuarios]),
     BitacoraModule,
-    PermisosModule,
     MailModule,
     AuthModule,
   ],

@@ -104,7 +104,7 @@ export class ModulosService {
         idUser,
         EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -226,7 +226,7 @@ export class ModulosService {
         idUser,
         EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {
@@ -280,7 +280,7 @@ export class ModulosService {
         idUser,
         EnumModulos.MODULOS,
         EstatusEnumBitcora.ERROR,
-        error.message,
+        error instanceof Error ? error.message : String(error),
       );
 
       if (error instanceof HttpException) {

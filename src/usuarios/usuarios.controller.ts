@@ -9,6 +9,7 @@ import {
   UseGuards,
   ParseIntPipe,
   Request,
+  HttpCode,
 } from '@nestjs/common';
 import {
   ApiOperation,
@@ -39,11 +40,32 @@ export class UsuariosController {
   // ==================== POST ====================
 
   @Post()
-  @ApiOperation({ 
+  @HttpCode(201)
+  @ApiOperation({
     summary: 'Crear un nuevo usuario',
-    description: 'Registra un nuevo usuario en el sistema asociado al usuario autenticado'
+    description:
+      'Registra un usuario con nombre, apellidos, correo, contraseña, rol y grupo.',
   })
-  @ApiBody({ type: CreateUsuarioDto })
+  @ApiBody({
+    type: CreateUsuarioDto,
+    examples: {
+      default: {
+        summary: 'Crear usuario',
+        value: {
+          nombre: 'Capturista',
+          apellidoPaterno: 'Sistemas',
+          apellidoMaterno: '3',
+          correo: 'capturista3@gmail.com',
+          password: 'P@ssw0rd.',
+          confirmPassword: 'P@ssw0rd.',
+          idRol: 1,
+          idGrupo: 1,
+          emailConfirmed: 1,
+          estatus: 1,
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Usuario creado exitosamente',
@@ -73,7 +95,7 @@ export class UsuariosController {
   @Get('list')
   @ApiOperation({ 
     summary: 'Obtener lista completa de usuarios',
-    description: 'Obtiene todos los usuarios sin paginación según el rol y permisos'
+    description: 'Obtiene todos los usuarios sin paginación según el rol del usuario autenticado'
   })
   @ApiResponse({ 
     status: 200, 
@@ -163,7 +185,7 @@ export class UsuariosController {
   @Get(':id')
   @ApiOperation({ 
     summary: 'Obtener usuario por ID',
-    description: 'Obtiene la información detallada de un usuario específico por su ID'
+    description: 'Obtiene la información del usuario. Los permisos se gestionan por rol (RolesPermisos), no por usuario.'
   })
   @ApiParam({
     name: 'id',
@@ -273,32 +295,47 @@ export class UsuariosController {
   }
 
   @Patch(':id')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Actualizar datos del usuario',
-    description: 'Actualiza la información completa de un usuario existente'
+    description:
+      'Actualiza nombre, apellidos, rol y grupo de un usuario existente.',
   })
   @ApiParam({
     name: 'id',
     type: 'number',
     description: 'ID del usuario',
-    example: 1
+    example: 1,
   })
-  @ApiBody({ type: UpdateUsuarioDto })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiBody({
+    type: UpdateUsuarioDto,
+    examples: {
+      default: {
+        summary: 'Actualizar usuario',
+        value: {
+          nombre: 'Capturista',
+          apellidoPaterno: 'Sistemas',
+          apellidoMaterno: '3',
+          idRol: 1,
+          idGrupo: 1,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
     description: 'Usuario actualizado exitosamente',
   })
-  @ApiResponse({ 
-    status: 400, 
-    description: 'Datos inválidos' 
+  @ApiResponse({
+    status: 400,
+    description: 'Datos inválidos',
   })
-  @ApiResponse({ 
-    status: 404, 
-    description: 'Usuario no encontrado' 
+  @ApiResponse({
+    status: 404,
+    description: 'Usuario no encontrado',
   })
   @ApiResponse({
     status: 401,
-    description: 'No autorizado'
+    description: 'No autorizado',
   })
   async updateUsuario(
     @Param('id', ParseIntPipe) id: number,
