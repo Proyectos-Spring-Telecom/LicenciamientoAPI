@@ -22,13 +22,21 @@ export class UpdateUsuarioDto {
     message: 'El apellido materno no puede exceder 191 caracteres',
   })
   @ApiProperty({ description: 'Apellido materno', example: '3' })
-  apellidoMaterno: string;
+  apellidoMaterno!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'El teléfono es obligatorio' })
+  @ApiProperty({
+    description: 'Número de teléfono',
+    example: '5512345678',
+  })
+  telefono!: string;
 
   @IsInt({ message: 'idRol debe ser un número entero' })
   @ApiProperty({ description: 'Rol asignado', example: 1 })
-  idRol: number;
+  idRol!: number;
 
   @IsInt({ message: 'idGrupo debe ser un número entero' })
   @ApiProperty({ description: 'Grupo asignado', example: 1 })
-  idGrupo: number;
+  idGrupo!: number;
 }

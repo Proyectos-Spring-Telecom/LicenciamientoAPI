@@ -34,6 +34,14 @@ export class CreateUsuarioDto {
   @ApiProperty({ description: 'Apellido materno', example: '3' })
   apellidoMaterno!: string;
 
+  @IsString()
+  @IsNotEmpty({ message: 'El teléfono es obligatorio' })
+  @ApiProperty({
+    description: 'Número de teléfono',
+    example: '5512345678',
+  })
+  telefono!: string;
+
   @IsEmail({}, { message: 'El correo no es válido' })
   @IsNotEmpty({ message: 'El correo es obligatorio' })
   @MaxLength(191, { message: 'El correo no puede exceder 191 caracteres' })

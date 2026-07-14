@@ -92,7 +92,7 @@ INNER JOIN Roles r ON u.IdRol = r.Id`;
       let usuarios;
       let totalResult;
 
-      if (rol === 1) {
+      if (rol === 4) {
         usuarios = await this.usuarioRepository.query(
           `${this.usuarioSelect}
 ORDER BY u.Id DESC
@@ -106,17 +106,16 @@ LIMIT ? OFFSET ?;`,
       } else {
         usuarios = await this.usuarioRepository.query(
           `${this.usuarioSelect}
-WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?
+WHERE u.IdRol != 4
 ORDER BY u.Id DESC
 LIMIT ? OFFSET ?;`,
-          [idGrupo, idUser, limit, offset],
+          [limit, offset],
         );
 
         totalResult = await this.usuarioRepository.query(
           `SELECT COUNT(*) AS total
 FROM Usuarios u
-WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?`,
-          [idGrupo, idUser],
+WHERE u.IdRol != 4`,
         );
       }
 
@@ -145,18 +144,16 @@ WHERE u.IdGrupo = ? AND u.Estatus = 1 AND u.Id != ?`,
     try {
       let usuarios;
 
-      if (rol === 1) {
+      if (rol === 4) {
         usuarios = await this.usuarioRepository.query(
           `${this.usuarioSelect}
-WHERE u.Estatus = 1
 ORDER BY u.Id DESC;`,
         );
       } else {
         usuarios = await this.usuarioRepository.query(
           `${this.usuarioSelect}
-WHERE u.IdGrupo = ? AND u.Estatus = 1
+WHERE u.IdRol != 4
 ORDER BY u.Id DESC;`,
-          [idGrupo],
         );
       }
 
@@ -266,6 +263,7 @@ ORDER BY u.Id DESC`,
         nombre: createUsuarioDto.nombre,
         apellidoPaterno: createUsuarioDto.apellidoPaterno,
         apellidoMaterno: createUsuarioDto.apellidoMaterno,
+        phoneNumber: createUsuarioDto.telefono,
         userName: createUsuarioDto.correo,
         passwordHash: hashedPassword,
         idRol: createUsuarioDto.idRol,
@@ -280,6 +278,7 @@ ORDER BY u.Id DESC`,
         nombre: createUsuarioDto.nombre,
         apellidoPaterno: createUsuarioDto.apellidoPaterno,
         apellidoMaterno: createUsuarioDto.apellidoMaterno,
+        phoneNumber: createUsuarioDto.telefono,
         correo: createUsuarioDto.correo,
         idRol: createUsuarioDto.idRol,
         idGrupo: createUsuarioDto.idGrupo,
@@ -431,6 +430,7 @@ ORDER BY u.Id DESC`,
         nombre: updateUsuarioDto.nombre,
         apellidoPaterno: updateUsuarioDto.apellidoPaterno,
         apellidoMaterno: updateUsuarioDto.apellidoMaterno,
+        phoneNumber: updateUsuarioDto.telefono,
         idRol: updateUsuarioDto.idRol,
         idGrupo: updateUsuarioDto.idGrupo,
       });
