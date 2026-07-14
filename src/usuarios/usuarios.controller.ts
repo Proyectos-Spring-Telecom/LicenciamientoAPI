@@ -43,7 +43,7 @@ export class UsuariosController {
   @ApiOperation({
     summary: 'Crear un nuevo usuario',
     description:
-      'Registra un usuario con nombre, apellidos, correo, contraseña, rol y grupo.',
+      'Registra un usuario con nombre, apellidos, teléfono, correo, contraseña, rol y grupo.',
   })
   @ApiBody({
     type: CreateUsuarioDto,
@@ -54,6 +54,7 @@ export class UsuariosController {
           nombre: 'Capturista',
           apellidoPaterno: 'Sistemas',
           apellidoMaterno: '3',
+          telefono: '5512345678',
           correo: 'capturista3@gmail.com',
           password: 'P@ssw0rd.',
           confirmPassword: 'P@ssw0rd.',
@@ -94,7 +95,8 @@ export class UsuariosController {
   @Get('list')
   @ApiOperation({
     summary: 'Obtener lista completa de usuarios',
-    description: 'Obtiene todos los usuarios sin paginación según el rol del usuario autenticado'
+    description:
+      'Lista todos los usuarios sin paginación. Si el rol autenticado es 4, ve todos; si es distinto de 4, ve todos excepto usuarios con IdRol = 4.',
   })
   @ApiResponse({
     status: 200,
@@ -102,7 +104,7 @@ export class UsuariosController {
   })
   @ApiResponse({
     status: 401,
-    description: 'No autorizado'
+    description: 'No autorizado',
   })
   async findAllList(@Request() req): Promise<ApiResponseCommon> {
     const idGrupo = req.user.idGrupo;
@@ -142,19 +144,20 @@ export class UsuariosController {
   @Get(':page/:limit')
   @ApiOperation({
     summary: 'Obtener usuarios con paginación',
-    description: 'Obtiene una lista paginada de usuarios según los parámetros especificados'
+    description:
+      'Lista paginada de usuarios. Si el rol autenticado es 4, ve todos; si es distinto de 4, ve todos excepto usuarios con IdRol = 4.',
   })
   @ApiParam({
     name: 'page',
     type: 'number',
     description: 'Número de página',
-    example: 1
+    example: 1,
   })
   @ApiParam({
     name: 'limit',
     type: 'number',
     description: 'Cantidad de registros por página',
-    example: 10
+    example: 10,
   })
   @ApiResponse({
     status: 200,
@@ -162,7 +165,7 @@ export class UsuariosController {
   })
   @ApiResponse({
     status: 401,
-    description: 'No autorizado'
+    description: 'No autorizado',
   })
   async findAll(
     @Param('page', ParseIntPipe) page: number,
@@ -292,7 +295,7 @@ export class UsuariosController {
   @ApiOperation({
     summary: 'Actualizar datos del usuario',
     description:
-      'Actualiza nombre, apellidos, rol y grupo de un usuario existente.',
+      'Actualiza nombre, apellidos, teléfono, rol y grupo de un usuario existente.',
   })
   @ApiParam({
     name: 'id',
@@ -309,6 +312,7 @@ export class UsuariosController {
           nombre: 'Capturista',
           apellidoPaterno: 'Sistemas',
           apellidoMaterno: '3',
+          telefono: '5512345678',
           idRol: 1,
           idGrupo: 1,
         },
