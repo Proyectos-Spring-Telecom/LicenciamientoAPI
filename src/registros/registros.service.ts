@@ -830,7 +830,6 @@ export class RegistrosService {
     }
   }
 
-
   private async assertSapacTipoFotoCatalog(
     files: SapacFotoFiles,
   ): Promise<void> {

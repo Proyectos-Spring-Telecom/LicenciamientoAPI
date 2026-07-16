@@ -54,7 +54,7 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
   private basePath!: string;
   private publicBaseUrl!: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   onModuleInit(): void {
     this.resolveBasePath();
@@ -270,8 +270,7 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
             : undefined;
         if (code !== 'ENOENT') {
           this.logger.warn(
-            `No se pudo eliminar archivo temporal: ${
-              err instanceof Error ? err.message : String(err)
+            `No se pudo eliminar archivo temporal: ${err instanceof Error ? err.message : String(err)
             }`,
           );
         }

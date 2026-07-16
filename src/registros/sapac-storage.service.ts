@@ -53,7 +53,7 @@ export class SapacStorageService implements OnModuleInit {
   private basePath!: string;
   private publicBaseUrl!: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   onModuleInit(): void {
     this.resolveBasePath();
@@ -202,8 +202,7 @@ export class SapacStorageService implements OnModuleInit {
             : undefined;
         if (code !== 'ENOENT') {
           this.logger.warn(
-            `No se pudo eliminar archivo temporal: ${
-              error instanceof Error ? error.message : String(error)
+            `No se pudo eliminar archivo temporal: ${error instanceof Error ? error.message : String(error)
             }`,
           );
         }
