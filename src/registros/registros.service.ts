@@ -9,6 +9,7 @@ import { DataSource, In } from 'typeorm';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import {
   ApiCrudResponse,
+  ApiResponseCommon,
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
 import { EnumModulos } from 'src/common/estatus.enum';
@@ -38,6 +39,7 @@ import { CreateLicenciaConstruccionDto } from './dto/create-licencia-construccio
 import { CreateProteccionCivilDto } from './dto/create-proteccion-civil.dto';
 import { CreateRegistroDto } from './dto/create-registro.dto';
 import { CreateSapacDto } from './dto/create-sapac.dto';
+import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import {
   FIRMA_TIPO_FOTO,
   FirmaKey,
@@ -124,6 +126,87 @@ export class RegistrosService {
     private readonly storageService: LicenciaConstruccionStorageService,
     private readonly sapacStorageService: SapacStorageService,
   ) { }
+
+  /**
+   * Lista paginada solo de la tabla Registros (sin joins ni relaciones).
+   */
+  async findAllPaginated(
+    query: GetRegistrosQueryDto,
+  ): Promise<ApiResponseCommon> {
+    try {
+      const page = query.page ?? 1;
+      const limit = query.limit ?? 10;
+      const skip = (page - 1) * limit;
+
+      const [registros, total] = await this.dataSource
+        .getRepository(Registros)
+        .findAndCount({
+          select: [
+            'id',
+            'registro',
+            'latitud',
+            'longitud',
+            'entidadFederativa',
+            'municipio',
+            'localidad',
+            'colonia',
+            'calle',
+            'noInterior',
+            'noExterior',
+            'cp',
+            'tipoRegistro',
+            'predioObra',
+            'estatus',
+            'fechaCreacion',
+            'fechaActualizacion',
+          ],
+          skip,
+          take: limit,
+          order: {
+            fechaCreacion: 'DESC',
+            id: 'DESC',
+          },
+        });
+
+      return {
+        data: registros.map((registro) => this.mapRegistroListItem(registro)),
+        paginated: {
+          total,
+          page,
+          lastPage: total === 0 ? 0 : Math.ceil(total / limit),
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al obtener los registros',
+      );
+    }
+  }
+
+  private mapRegistroListItem(registro: Registros) {
+    return {
+      id: Number(registro.id),
+      registro: registro.registro,
+      latitud: registro.latitud,
+      longitud: registro.longitud,
+      entidadFederativa: registro.entidadFederativa,
+      municipio: registro.municipio,
+      localidad: registro.localidad,
+      colonia: registro.colonia,
+      calle: registro.calle,
+      noInterior: registro.noInterior,
+      noExterior: registro.noExterior,
+      cp: registro.cp,
+      tipoRegistro: registro.tipoRegistro,
+      predioObra: registro.predioObra,
+      estatus: registro.estatus,
+      fechaCreacion: registro.fechaCreacion,
+      fechaActualizacion: registro.fechaActualizacion,
+    };
+  }
 
   async createFromMultipart(
     body: Record<string, unknown>,
