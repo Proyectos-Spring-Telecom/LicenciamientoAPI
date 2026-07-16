@@ -31,13 +31,25 @@ export class RolesPermisos {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdRol', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdRol',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_RolesPermisos_Roles',
+    },
+  ])
   idRol2: Roles;
 
   @ManyToOne(() => Permisos, (permisos) => permisos.rolesPermisos, {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdPermiso', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdPermiso',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_RolesPermisos_Permisos',
+    },
+  ])
   idPermiso2: Permisos;
 }

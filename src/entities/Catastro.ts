@@ -2,19 +2,22 @@ import {
   Column,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { applySchema } from 'src/common/apply-schema.decorator';
+import { Registros } from './Registros';
 
 @applySchema
-@Index('FK_Catastro_Licencias', ['idLicencia'], {})
+@Index('IX_Catastro_IdRegistro', ['idRegistro'], {})
 @Entity('Catastro')
 export class Catastro {
   @PrimaryGeneratedColumn({ type: 'bigint', name: 'Id' })
   id: number;
 
-  @Column('bigint', { name: 'IdLicencia', nullable: true })
-  idLicencia: number | null;
+  @Column('bigint', { name: 'IdRegistro', nullable: true })
+  idRegistro: number | null;
 
   @Column('double', { name: 'Clave', nullable: true })
   clave: number | null;
@@ -27,4 +30,17 @@ export class Catastro {
 
   @Column('varchar', { name: 'UsoSuelo', nullable: true, length: 20 })
   usoSuelo: string | null;
+
+  @ManyToOne(() => Registros, (registro) => registro.catastros, {
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+  })
+  @JoinColumn([
+    {
+      name: 'IdRegistro',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Catastro_Registros',
+    },
+  ])
+  idRegistro2: Registros;
 }
