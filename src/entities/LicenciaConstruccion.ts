@@ -3,7 +3,6 @@ import {
   Entity,
   Index,
   JoinColumn,
-  ManyToOne,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
@@ -77,15 +76,6 @@ export class LicenciaConstruccion {
   @Column('datetime', { name: 'Fecha', nullable: true })
   fecha: Date | null;
 
-  @Column('varchar', { name: 'FirmaPropietario', nullable: true, length: 255 })
-  firmaPropietario: string | null;
-
-  @Column('varchar', { name: 'FirmaDRO', nullable: true, length: 255 })
-  firmaDRO: string | null;
-
-  @Column('varchar', { name: 'FirmaCorresponsable', nullable: true, length: 255 })
-  firmaCorresponsable: string | null;
-
   @Column('varchar', { name: 'NumeroExpediente', nullable: true, length: 50 })
   numeroExpediente: string | null;
 
@@ -95,12 +85,48 @@ export class LicenciaConstruccion {
   @Column('tinyint', { name: 'SeguimientoObra', nullable: true })
   seguimientoObra: number | null;
 
-  @Column('varchar', {
-    name: 'FirmaResponsableRecepcionDocumento',
-    nullable: true,
-    length: 255,
+  @Column('tinyint', { name: 'ConstanciaAlineamiento', nullable: true })
+  constanciaAlineamiento: number | null;
+
+  @Column('tinyint', { name: 'LicenciaUsoSuelo', nullable: true })
+  licenciaUsoSuelo: number | null;
+
+  @Column('tinyint', { name: 'PlanoAutorizado', nullable: true })
+  planoAutorizado: number | null;
+
+  @Column('tinyint', { name: 'LicenciaFraccionamiento', nullable: true })
+  licenciaFraccionamiento: number | null;
+
+  @Column('tinyint', { name: 'Escrituras', nullable: true })
+  escrituras: number | null;
+
+  @Column('tinyint', { name: 'FactibilidadAguaPotable', nullable: true })
+  factibilidadAguaPotable: number | null;
+
+  @Column('tinyint', { name: 'RecibosPagoPredial', nullable: true })
+  recibosPagoPredial: number | null;
+
+  @Column('tinyint', { name: 'RecibosMunicipales', nullable: true })
+  recibosMunicipales: number | null;
+
+  @Column('tinyint', { name: 'PlanoArquitectonicos', nullable: true })
+  planoArquitectonicos: number | null;
+
+  @Column('tinyint', { name: 'Otros', nullable: true })
+  otros: number | null;
+
+  @Column('datetime', {
+    name: 'FechaCreacion',
+    default: () => 'CURRENT_TIMESTAMP',
   })
-  firmaResponsableRecepcionDocumento: string | null;
+  fechaCreacion: Date;
+
+  @Column('datetime', {
+    name: 'FechaActualizacion',
+    default: () => 'CURRENT_TIMESTAMP',
+    onUpdate: 'CURRENT_TIMESTAMP',
+  })
+  fechaActualizacion: Date;
 
   @OneToOne(() => Registros, (registro) => registro.licenciaConstruccion, {
     onDelete: 'CASCADE',

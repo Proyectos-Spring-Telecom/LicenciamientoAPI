@@ -19,8 +19,8 @@ export class Catastro {
   @Column('bigint', { name: 'IdRegistro', nullable: true })
   idRegistro: number | null;
 
-  @Column('double', { name: 'Clave', nullable: true })
-  clave: number | null;
+  @Column('varchar', { name: 'Clave', nullable: true, length: 200 })
+  clave: string | null;
 
   @Column('varchar', { name: 'M2', nullable: true, length: 20 })
   m2: string | null;

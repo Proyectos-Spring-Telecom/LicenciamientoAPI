@@ -8,6 +8,7 @@ import { ModulosModule } from './modulos/modulos.module';
 import { PermisosModule } from './permisos/permisos.module';
 import { RolesModule } from './roles/roles.module';
 import { MailModule } from './mail/mail.module';
+import { RegistrosModule } from './registros/registros.module';
 import Joi from 'joi';
 
 @Module({
@@ -28,6 +29,9 @@ import Joi from 'joi';
         SMTP: Joi.number().optional(),
         E_MAIL: Joi.string().allow(''),
         SMTP_PASS: Joi.string().allow(''),
+        LICENCIA_CONSTRUCCION_STORAGE_PATH: Joi.string().required(),
+        FOTOS_REGISTROS_STORAGE_PATH: Joi.string().required(),
+        UPLOAD_MAX_SIZE: Joi.number().optional(),
       }),
     }),
 
@@ -68,6 +72,8 @@ import Joi from 'joi';
     MailModule,
 
     ModulosModule,
+
+    RegistrosModule,
   ],
 })
 export class AppModule { }

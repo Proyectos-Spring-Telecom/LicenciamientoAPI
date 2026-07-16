@@ -17,8 +17,7 @@ export enum EnumModulos {
   USUARIOS = 21,
   PERMISOS = 22,
   CAPTURISTA = 23,
-  ALUMBRADOS = 24,
-  REGISTROS = 23,
+  REGISTROS = 24,
 }
 
 
