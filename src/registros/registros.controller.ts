@@ -79,10 +79,16 @@ export class RegistrosController {
   @ApiOperation({
     summary: 'Listar registros paginados',
     description: `
-Consulta únicamente la tabla \`Registros\` (sin joins ni relaciones).
+Consulta columnas de la tabla \`Registros\`. La visibilidad depende del rol del JWT:
+
+- Rol 4: todos los registros.
+- Rol 3: todos los registros.
+- Rol 2: registros de su grupo (\`CapturistaVisita.IdGrupo\`).
+- Rol 1: registros capturados por el usuario (\`CapturistaVisita.IdCapturista\`).
 
 Parámetros opcionales: \`page\` (default 1) y \`limit\` (default 10, máximo 100).
 Orden: FechaCreacion DESC, Id DESC.
+No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
 `,
   })
   @ApiQuery({
@@ -106,10 +112,16 @@ Orden: FechaCreacion DESC, Id DESC.
   })
   @ApiResponse({ status: 400, description: 'Parámetros de paginación inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Rol no autorizado, supervisor sin grupo, o usuario no identificable',
+  })
   findAllPaginated(
     @Query() query: GetRegistrosQueryDto,
+    @Request() req: { user: AuthenticatedUser },
   ): Promise<ApiResponseCommon> {
-    return this.registrosService.findAllPaginated(query);
+    return this.registrosService.findAllPaginated(query, req.user);
   }
 
   @Post()

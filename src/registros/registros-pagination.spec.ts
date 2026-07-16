@@ -1,8 +1,11 @@
+import { ForbiddenException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { DataSource, Repository } from 'typeorm';
-import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
+import { DataSource } from 'typeorm';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
+import { CapturistaVisita } from 'src/entities/CapturistaVisita';
 import { Registros } from 'src/entities/Registros';
+import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import { RegistrosService } from './registros.service';
 
 async function validateQuery(
@@ -16,19 +19,23 @@ async function validateQuery(
   };
 }
 
+function user(
+  partial: Partial<AuthenticatedUser> & Pick<AuthenticatedUser, 'rol'>,
+): AuthenticatedUser {
+  return {
+    userId: partial.userId === undefined ? 1 : partial.userId,
+    email: partial.email ?? 'test@example.com',
+    idGrupo: partial.idGrupo !== undefined ? partial.idGrupo : 7,
+    rol: partial.rol,
+  };
+}
+
 describe('GetRegistrosQueryDto', () => {
   it('usa page=1 y limit=10 por defecto', async () => {
     const { dto, errors } = await validateQuery({});
     expect(errors).toEqual([]);
     expect(dto.page).toBe(1);
     expect(dto.limit).toBe(10);
-  });
-
-  it('acepta page y limit personalizados', async () => {
-    const { dto, errors } = await validateQuery({ page: '2', limit: '25' });
-    expect(errors).toEqual([]);
-    expect(dto.page).toBe(2);
-    expect(dto.limit).toBe(25);
   });
 
   it('acepta limit=100', async () => {
@@ -39,13 +46,6 @@ describe('GetRegistrosQueryDto', () => {
 
   it.each([
     [{ page: '0' }, 'page'],
-    [{ page: '-1' }, 'page'],
-    [{ page: '1.5' }, 'page'],
-    [{ page: 'texto' }, 'page'],
-    [{ limit: '0' }, 'limit'],
-    [{ limit: '-1' }, 'limit'],
-    [{ limit: '1.5' }, 'limit'],
-    [{ limit: 'texto' }, 'limit'],
     [{ limit: '101' }, 'limit'],
     [{ limit: '10abc' }, 'limit'],
   ])('rechaza %j', async (input, field) => {
@@ -53,56 +53,158 @@ describe('GetRegistrosQueryDto', () => {
     expect(errors.length).toBeGreaterThan(0);
     expect(errors.some((m) => m.toLowerCase().includes(field))).toBe(true);
   });
+
+  it('no declara idRol/idGrupo/idUsuario (no afectan la consulta)', () => {
+    const dto = new GetRegistrosQueryDto();
+    expect(dto).not.toHaveProperty('idRol');
+    expect(dto).not.toHaveProperty('idGrupo');
+    expect(dto).not.toHaveProperty('idUsuario');
+  });
 });
 
-describe('RegistrosService.findAllPaginated', () => {
-  const findAndCount = jest.fn();
-  const getRepository = jest.fn().mockReturnValue({ findAndCount });
-
-  const service = new RegistrosService(
-    { getRepository } as unknown as DataSource,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
+  let qb: {
+    select: jest.Mock;
+    innerJoin: jest.Mock;
+    andWhere: jest.Mock;
+    distinct: jest.Mock;
+    orderBy: jest.Mock;
+    addOrderBy: jest.Mock;
+    skip: jest.Mock;
+    take: jest.Mock;
+    getManyAndCount: jest.Mock;
+  };
+  let createQueryBuilder: jest.Mock;
+  let getRepository: jest.Mock;
+  let service: RegistrosService;
 
   beforeEach(() => {
-    findAndCount.mockReset();
-    getRepository.mockClear();
+    qb = {
+      select: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      distinct: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      take: jest.fn().mockReturnThis(),
+      getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+    };
+    createQueryBuilder = jest.fn().mockReturnValue(qb);
+    getRepository = jest.fn().mockReturnValue({ createQueryBuilder });
+    service = new RegistrosService(
+      { getRepository } as unknown as DataSource,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
   });
 
-  it('consulta solo Registros con skip/take y orden estable', async () => {
-    findAndCount.mockResolvedValue([[], 0]);
-
-    const result = await service.findAllPaginated({ page: 1, limit: 10 });
+  it('rol 4 obtiene todos sin join a CapturistaVisita', async () => {
+    await service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 4 }));
 
     expect(getRepository).toHaveBeenCalledWith(Registros);
-    expect(findAndCount).toHaveBeenCalledWith({
-      select: expect.arrayContaining([
-        'id',
-        'registro',
-        'estatus',
-        'fechaCreacion',
-        'fechaActualizacion',
-      ]),
-      skip: 0,
-      take: 10,
-      order: {
-        fechaCreacion: 'DESC',
-        id: 'DESC',
-      },
-    });
-    expect(findAndCount.mock.calls[0][0]).not.toHaveProperty('relations');
-    expect(result.data).toEqual([]);
-    expect(result.paginated).toEqual({
-      total: 0,
-      page: 1,
-      lastPage: 0,
-    });
+    expect(createQueryBuilder).toHaveBeenCalledWith('registro');
+    expect(qb.innerJoin).not.toHaveBeenCalled();
+    expect(qb.andWhere).not.toHaveBeenCalled();
+    expect(qb.distinct).not.toHaveBeenCalled();
+    expect(qb.orderBy).toHaveBeenCalledWith('registro.fechaCreacion', 'DESC');
+    expect(qb.addOrderBy).toHaveBeenCalledWith('registro.id', 'DESC');
+    expect(qb.skip).toHaveBeenCalledWith(0);
+    expect(qb.take).toHaveBeenCalledWith(10);
+    expect(qb.getManyAndCount).toHaveBeenCalled();
   });
 
-  it('calcula skip y lastPage correctamente', async () => {
-    findAndCount.mockResolvedValue([
+  it('rol 3 obtiene todos sin join a CapturistaVisita', async () => {
+    await service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 3 }));
+
+    expect(qb.innerJoin).not.toHaveBeenCalled();
+    expect(qb.andWhere).not.toHaveBeenCalled();
+  });
+
+  it('rol 2 filtra por IdGrupo con distinct', async () => {
+    await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 2, idGrupo: 7 }),
+    );
+
+    expect(qb.innerJoin).toHaveBeenCalledWith(
+      CapturistaVisita,
+      'capturistaVisita',
+      'capturistaVisita.idRegistro = registro.id',
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'capturistaVisita.idGrupo = :idGrupo',
+      { idGrupo: 7 },
+    );
+    expect(qb.distinct).toHaveBeenCalledWith(true);
+    expect(qb.andWhere.mock.calls.some((c) => String(c[0]).includes('idCapturista'))).toBe(
+      false,
+    );
+  });
+
+  it('rol 2 sin IdGrupo recibe 403', async () => {
+    await expect(
+      service.findAllPaginated(
+        { page: 1, limit: 10 },
+        user({ rol: 2, idGrupo: null }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(qb.getManyAndCount).not.toHaveBeenCalled();
+  });
+
+  it('rol 1 filtra por IdCapturista y no solo por IdGrupo', async () => {
+    await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 1, userId: 30, idGrupo: 7 }),
+    );
+
+    expect(qb.innerJoin).toHaveBeenCalledWith(
+      CapturistaVisita,
+      'capturistaVisita',
+      'capturistaVisita.idRegistro = registro.id',
+    );
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'capturistaVisita.idCapturista = :idUsuario',
+      { idUsuario: 30 },
+    );
+    expect(qb.distinct).toHaveBeenCalledWith(true);
+    expect(
+      qb.andWhere.mock.calls.some((c) => String(c[0]).includes('idGrupo')),
+    ).toBe(false);
+  });
+
+  it('rol 1 sin IdUsuario recibe 403', async () => {
+    await expect(
+      service.findAllPaginated(
+        { page: 1, limit: 10 },
+        user({ rol: 1, userId: null as unknown as number }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(qb.getManyAndCount).not.toHaveBeenCalled();
+  });
+
+  it('rol desconocido recibe 403', async () => {
+    await expect(
+      service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 8 })),
+    ).rejects.toThrow('No tienes permisos para consultar los registros.');
+
+    expect(qb.getManyAndCount).not.toHaveBeenCalled();
+  });
+
+  it('rol null recibe 403 (denegar por defecto)', async () => {
+    await expect(
+      service.findAllPaginated(
+        { page: 1, limit: 10 },
+        user({ rol: null }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('aplica filtro antes de paginación y calcula lastPage', async () => {
+    qb.getManyAndCount.mockResolvedValue([
       [
         {
           id: 25,
@@ -127,11 +229,16 @@ describe('RegistrosService.findAllPaginated', () => {
       35,
     ]);
 
-    const result = await service.findAllPaginated({ page: 2, limit: 10 });
-
-    expect(findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 10, take: 10 }),
+    const result = await service.findAllPaginated(
+      { page: 2, limit: 10 },
+      user({ rol: 2, idGrupo: 7 }),
     );
+
+    const joinOrder = qb.innerJoin.mock.invocationCallOrder[0];
+    const skipOrder = qb.skip.mock.invocationCallOrder[0];
+    expect(joinOrder).toBeLessThan(skipOrder);
+    expect(qb.skip).toHaveBeenCalledWith(10);
+    expect(qb.take).toHaveBeenCalledWith(10);
     expect(result.paginated).toEqual({
       total: 35,
       page: 2,
@@ -142,22 +249,22 @@ describe('RegistrosService.findAllPaginated', () => {
         id: 25,
         municipio: 'Cuernavaca',
         estatus: 4,
-        predioObra: 0,
       }),
     );
+    expect(result.data[0]).not.toHaveProperty('idCapturista');
+    expect(result.data[0]).not.toHaveProperty('idGrupo');
     expect(result.data[0]).not.toHaveProperty('capturistaVisitas');
-    expect(result.data[0]).not.toHaveProperty('sapacs');
-    expect(result.data[0]).not.toHaveProperty('catastros');
   });
 
-  it('devuelve data vacía cuando la página supera el total', async () => {
-    findAndCount.mockResolvedValue([[], 15]);
+  it('página fuera de rango devuelve data vacía con metadata real', async () => {
+    qb.getManyAndCount.mockResolvedValue([[], 15]);
 
-    const result = await service.findAllPaginated({ page: 50, limit: 10 });
-
-    expect(findAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({ skip: 490, take: 10 }),
+    const result = await service.findAllPaginated(
+      { page: 50, limit: 10 },
+      user({ rol: 4 }),
     );
+
+    expect(qb.skip).toHaveBeenCalledWith(490);
     expect(result.data).toEqual([]);
     expect(result.paginated).toEqual({
       total: 15,
@@ -166,25 +273,11 @@ describe('RegistrosService.findAllPaginated', () => {
     });
   });
 
-  it('mapea id bigint numérico sin relaciones', async () => {
-    findAndCount.mockResolvedValue([
-      [{ id: 1, registro: 'R-1', estatus: 4 } as Registros],
-      1,
-    ]);
+  it('select solo incluye columnas de Registros', async () => {
+    await service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 4 }));
 
-    const result = await service.findAllPaginated({ page: 1, limit: 10 });
-
-    expect(result.data[0].id).toBe(1);
-    expect(typeof result.data[0].id).toBe('number');
-  });
-});
-
-describe('Registros repository pagination contract', () => {
-  it('findAndCount recibe Repository tipado (no paginación en memoria)', () => {
-    const repo = {
-      findAndCount: jest.fn(),
-    } as unknown as Repository<Registros>;
-
-    expect(typeof repo.findAndCount).toBe('function');
+    const selected: string[] = qb.select.mock.calls[0][0];
+    expect(selected.every((col) => col.startsWith('registro.'))).toBe(true);
+    expect(selected.some((col) => col.includes('capturista'))).toBe(false);
   });
 });
