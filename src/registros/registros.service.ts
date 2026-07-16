@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DataSource, In } from 'typeorm';
+import { DataSource, In, SelectQueryBuilder } from 'typeorm';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import {
@@ -41,7 +41,12 @@ import { CreateLicenciaConstruccionDto } from './dto/create-licencia-construccio
 import { CreateProteccionCivilDto } from './dto/create-proteccion-civil.dto';
 import { CreateRegistroDto } from './dto/create-registro.dto';
 import { CreateSapacDto } from './dto/create-sapac.dto';
+import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
+import {
+  buildEndExclusiveDateLocal,
+  buildStartDateLocal,
+} from './registro-date-range';
 import {
   FIRMA_TIPO_FOTO,
   FirmaKey,
@@ -143,87 +148,8 @@ export class RegistrosService {
       const limit = query.limit ?? 10;
       const skip = (page - 1) * limit;
 
-      const idRol = Number(user.rol);
-      const idUsuario = user.userId;
-      const idGrupo = user.idGrupo;
-
-      const queryBuilder = this.dataSource
-        .getRepository(Registros)
-        .createQueryBuilder('registro')
-        .select([
-          'registro.id',
-          'registro.registro',
-          'registro.latitud',
-          'registro.longitud',
-          'registro.entidadFederativa',
-          'registro.municipio',
-          'registro.localidad',
-          'registro.colonia',
-          'registro.calle',
-          'registro.noInterior',
-          'registro.noExterior',
-          'registro.cp',
-          'registro.tipoRegistro',
-          'registro.predioObra',
-          'registro.estatus',
-          'registro.fechaCreacion',
-          'registro.fechaActualizacion',
-        ]);
-
-      switch (idRol) {
-        case 4:
-        case 3:
-          break;
-
-        case 2:
-          if (
-            idGrupo === undefined ||
-            idGrupo === null ||
-            String(idGrupo).trim() === ''
-          ) {
-            throw new ForbiddenException(
-              'El usuario supervisor no tiene un grupo asignado.',
-            );
-          }
-
-          queryBuilder
-            .innerJoin(
-              CapturistaVisita,
-              'capturistaVisita',
-              'capturistaVisita.idRegistro = registro.id',
-            )
-            .andWhere('capturistaVisita.idGrupo = :idGrupo', { idGrupo })
-            .distinct(true);
-          break;
-
-        case 1:
-          if (
-            idUsuario === undefined ||
-            idUsuario === null ||
-            String(idUsuario).trim() === ''
-          ) {
-            throw new ForbiddenException(
-              'No fue posible identificar al usuario autenticado.',
-            );
-          }
-
-          queryBuilder
-            .innerJoin(
-              CapturistaVisita,
-              'capturistaVisita',
-              'capturistaVisita.idRegistro = registro.id',
-            )
-            .andWhere('capturistaVisita.idCapturista = :idUsuario', {
-              idUsuario,
-            })
-            .distinct(true);
-          break;
-
-        default:
-          throw new ForbiddenException(
-            'No tienes permisos para consultar los registros.',
-          );
-      }
+      const queryBuilder = this.createRegistrosListQuery();
+      this.applyRegistroVisibilityByRole(queryBuilder, user);
 
       queryBuilder
         .orderBy('registro.fechaCreacion', 'DESC')
@@ -248,6 +174,149 @@ export class RegistrosService {
       throw new InternalServerErrorException(
         'Error al obtener los registros',
       );
+    }
+  }
+
+  /**
+   * Listado (sin paginación) filtrado por FechaCreacion inclusiva
+   * [fechaInicio 00:00:00, día siguiente a fechaFin 00:00:00).
+   * Misma visibilidad por rol que findAllPaginated.
+   */
+  async findByDateRange(
+    dto: GetRegistrosByDateRangeDto,
+    user: AuthenticatedUser,
+  ): Promise<{
+    status: string;
+    message: string;
+    data: ReturnType<RegistrosService['mapRegistroListItem']>[];
+  }> {
+    try {
+      if (dto.fechaInicio > dto.fechaFin) {
+        throw new BadRequestException(
+          'La fecha inicial no puede ser mayor que la fecha final.',
+        );
+      }
+
+      const startDate = buildStartDateLocal(dto.fechaInicio);
+      const endExclusive = buildEndExclusiveDateLocal(dto.fechaFin);
+
+      const queryBuilder = this.createRegistrosListQuery()
+        .andWhere('registro.fechaCreacion >= :startDate', { startDate })
+        .andWhere('registro.fechaCreacion < :endExclusive', { endExclusive });
+
+      this.applyRegistroVisibilityByRole(queryBuilder, user);
+
+      queryBuilder
+        .orderBy('registro.fechaCreacion', 'DESC')
+        .addOrderBy('registro.id', 'DESC');
+
+      const registros = await queryBuilder.getMany();
+
+      return {
+        status: 'success',
+        message: 'Registros obtenidos correctamente por rango de fechas.',
+        data: registros.map((registro) => this.mapRegistroListItem(registro)),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al obtener los registros por rango de fechas',
+      );
+    }
+  }
+
+  private createRegistrosListQuery(): SelectQueryBuilder<Registros> {
+    return this.dataSource
+      .getRepository(Registros)
+      .createQueryBuilder('registro')
+      .select([
+        'registro.id',
+        'registro.registro',
+        'registro.latitud',
+        'registro.longitud',
+        'registro.entidadFederativa',
+        'registro.municipio',
+        'registro.localidad',
+        'registro.colonia',
+        'registro.calle',
+        'registro.noInterior',
+        'registro.noExterior',
+        'registro.cp',
+        'registro.tipoRegistro',
+        'registro.predioObra',
+        'registro.estatus',
+        'registro.fechaCreacion',
+        'registro.fechaActualizacion',
+      ]);
+  }
+
+  /**
+   * Filtros de visibilidad compartidos (GET paginado y POST por rango).
+   * CapturistaVisita solo como INNER JOIN de filtro; no se selecciona.
+   */
+  private applyRegistroVisibilityByRole(
+    queryBuilder: SelectQueryBuilder<Registros>,
+    user: AuthenticatedUser,
+  ): void {
+    const idRol = Number(user.rol);
+    const idUsuario = user.userId;
+    const idGrupo = user.idGrupo;
+
+    switch (idRol) {
+      case 4:
+      case 3:
+        break;
+
+      case 2:
+        if (
+          idGrupo === undefined ||
+          idGrupo === null ||
+          String(idGrupo).trim() === ''
+        ) {
+          throw new ForbiddenException(
+            'El usuario supervisor no tiene un grupo asignado.',
+          );
+        }
+
+        queryBuilder
+          .innerJoin(
+            CapturistaVisita,
+            'capturistaVisita',
+            'capturistaVisita.idRegistro = registro.id',
+          )
+          .andWhere('capturistaVisita.idGrupo = :idGrupo', { idGrupo })
+          .distinct(true);
+        break;
+
+      case 1:
+        if (
+          idUsuario === undefined ||
+          idUsuario === null ||
+          String(idUsuario).trim() === ''
+        ) {
+          throw new ForbiddenException(
+            'No fue posible identificar al usuario autenticado.',
+          );
+        }
+
+        queryBuilder
+          .innerJoin(
+            CapturistaVisita,
+            'capturistaVisita',
+            'capturistaVisita.idRegistro = registro.id',
+          )
+          .andWhere('capturistaVisita.idCapturista = :idUsuario', {
+            idUsuario,
+          })
+          .distinct(true);
+        break;
+
+      default:
+        throw new ForbiddenException(
+          'No tienes permisos para consultar los registros.',
+        );
     }
   }
 

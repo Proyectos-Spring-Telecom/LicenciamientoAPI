@@ -9,6 +9,7 @@ import { PermisosModule } from './permisos/permisos.module';
 import { RolesModule } from './roles/roles.module';
 import { MailModule } from './mail/mail.module';
 import { RegistrosModule } from './registros/registros.module';
+import { MonitoreoModule } from './monitoreo/monitoreo.module';
 import Joi from 'joi';
 
 @Module({
@@ -76,6 +77,8 @@ import Joi from 'joi';
     ModulosModule,
 
     RegistrosModule,
+
+    MonitoreoModule,
   ],
 })
 export class AppModule { }
