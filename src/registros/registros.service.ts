@@ -6,7 +6,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
-import * as path from 'path';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import {
   ApiCrudResponse,
@@ -498,7 +497,7 @@ export class RegistrosService {
                 Fotos,
                 manager.create(Fotos, {
                   idRegistro,
-                  ruta: item.absolutePath,
+                  ruta: item.publicUrl,
                   fechaHora: ahora,
                   idTipoFoto: item.idTipoFoto,
                 }),
@@ -506,7 +505,7 @@ export class RegistrosService {
               data.fotos?.push({
                 id: Number(foto.id),
                 idTipoFoto: item.idTipoFoto,
-                ruta: path.basename(item.absolutePath),
+                ruta: item.publicUrl,
               });
             }
           }
@@ -600,7 +599,7 @@ export class RegistrosService {
                 FotosLicenciaConstruccion,
                 manager.create(FotosLicenciaConstruccion, {
                   idLicenciaConstruccion,
-                  ruta: item.absolutePath,
+                  ruta: item.publicUrl,
                   fechaHora: ahora,
                   idTipoFoto: item.idTipoFoto,
                 }),
@@ -608,7 +607,7 @@ export class RegistrosService {
               fotosResultado.push({
                 id: Number(foto.id),
                 idTipoFoto: item.idTipoFoto,
-                ruta: path.basename(item.absolutePath),
+                ruta: item.publicUrl,
               });
             }
           }
@@ -626,7 +625,7 @@ export class RegistrosService {
                 FotosLicenciaConstruccion,
                 manager.create(FotosLicenciaConstruccion, {
                   idLicenciaConstruccion,
-                  ruta: item.absolutePath,
+                  ruta: item.publicUrl,
                   fechaHora: ahora,
                   idTipoFoto: item.idTipoFoto,
                 }),
@@ -634,7 +633,7 @@ export class RegistrosService {
               fotosResultado.push({
                 id: Number(foto.id),
                 idTipoFoto: item.idTipoFoto,
-                ruta: path.basename(item.absolutePath),
+                ruta: item.publicUrl,
               });
             }
           }
@@ -830,6 +829,7 @@ export class RegistrosService {
       );
     }
   }
+
 
   private async assertSapacTipoFotoCatalog(
     files: SapacFotoFiles,

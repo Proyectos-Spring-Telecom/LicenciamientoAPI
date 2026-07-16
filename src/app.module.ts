@@ -31,6 +31,8 @@ import Joi from 'joi';
         SMTP_PASS: Joi.string().allow(''),
         LICENCIA_CONSTRUCCION_STORAGE_PATH: Joi.string().required(),
         FOTOS_REGISTROS_STORAGE_PATH: Joi.string().required(),
+        LICENCIA_CONSTRUCCION_PUBLIC_URL: Joi.string().uri().required(),
+        FOTOS_REGISTROS_PUBLIC_URL: Joi.string().uri().required(),
         UPLOAD_MAX_SIZE: Joi.number().optional(),
       }),
     }),
