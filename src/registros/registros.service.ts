@@ -1,11 +1,13 @@
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   Injectable,
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import {
   ApiCrudResponse,
@@ -128,45 +130,108 @@ export class RegistrosService {
   ) { }
 
   /**
-   * Lista paginada solo de la tabla Registros (sin joins ni relaciones).
+   * Lista paginada de Registros con visibilidad según rol del JWT:
+   * 4/3 = todos; 2 = por IdGrupo; 1 = por IdCapturista.
+   * CapturistaVisita solo se usa como filtro (INNER JOIN), no se devuelve.
    */
   async findAllPaginated(
     query: GetRegistrosQueryDto,
+    user: AuthenticatedUser,
   ): Promise<ApiResponseCommon> {
     try {
       const page = query.page ?? 1;
       const limit = query.limit ?? 10;
       const skip = (page - 1) * limit;
 
-      const [registros, total] = await this.dataSource
+      const idRol = Number(user.rol);
+      const idUsuario = user.userId;
+      const idGrupo = user.idGrupo;
+
+      const queryBuilder = this.dataSource
         .getRepository(Registros)
-        .findAndCount({
-          select: [
-            'id',
-            'registro',
-            'latitud',
-            'longitud',
-            'entidadFederativa',
-            'municipio',
-            'localidad',
-            'colonia',
-            'calle',
-            'noInterior',
-            'noExterior',
-            'cp',
-            'tipoRegistro',
-            'predioObra',
-            'estatus',
-            'fechaCreacion',
-            'fechaActualizacion',
-          ],
-          skip,
-          take: limit,
-          order: {
-            fechaCreacion: 'DESC',
-            id: 'DESC',
-          },
-        });
+        .createQueryBuilder('registro')
+        .select([
+          'registro.id',
+          'registro.registro',
+          'registro.latitud',
+          'registro.longitud',
+          'registro.entidadFederativa',
+          'registro.municipio',
+          'registro.localidad',
+          'registro.colonia',
+          'registro.calle',
+          'registro.noInterior',
+          'registro.noExterior',
+          'registro.cp',
+          'registro.tipoRegistro',
+          'registro.predioObra',
+          'registro.estatus',
+          'registro.fechaCreacion',
+          'registro.fechaActualizacion',
+        ]);
+
+      switch (idRol) {
+        case 4:
+        case 3:
+          break;
+
+        case 2:
+          if (
+            idGrupo === undefined ||
+            idGrupo === null ||
+            String(idGrupo).trim() === ''
+          ) {
+            throw new ForbiddenException(
+              'El usuario supervisor no tiene un grupo asignado.',
+            );
+          }
+
+          queryBuilder
+            .innerJoin(
+              CapturistaVisita,
+              'capturistaVisita',
+              'capturistaVisita.idRegistro = registro.id',
+            )
+            .andWhere('capturistaVisita.idGrupo = :idGrupo', { idGrupo })
+            .distinct(true);
+          break;
+
+        case 1:
+          if (
+            idUsuario === undefined ||
+            idUsuario === null ||
+            String(idUsuario).trim() === ''
+          ) {
+            throw new ForbiddenException(
+              'No fue posible identificar al usuario autenticado.',
+            );
+          }
+
+          queryBuilder
+            .innerJoin(
+              CapturistaVisita,
+              'capturistaVisita',
+              'capturistaVisita.idRegistro = registro.id',
+            )
+            .andWhere('capturistaVisita.idCapturista = :idUsuario', {
+              idUsuario,
+            })
+            .distinct(true);
+          break;
+
+        default:
+          throw new ForbiddenException(
+            'No tienes permisos para consultar los registros.',
+          );
+      }
+
+      queryBuilder
+        .orderBy('registro.fechaCreacion', 'DESC')
+        .addOrderBy('registro.id', 'DESC')
+        .skip(skip)
+        .take(limit);
+
+      const [registros, total] = await queryBuilder.getManyAndCount();
 
       return {
         data: registros.map((registro) => this.mapRegistroListItem(registro)),
