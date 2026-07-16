@@ -47,7 +47,13 @@ export class RefreshSessions {
     onDelete: 'CASCADE',
     onUpdate: 'RESTRICT',
   })
-  @JoinColumn([{ name: 'IdUsuario', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdUsuario',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_RefreshSessions_Usuarios',
+    },
+  ])
   usuario: Usuarios;
 
   @ManyToOne(() => RefreshSessions, { nullable: true })

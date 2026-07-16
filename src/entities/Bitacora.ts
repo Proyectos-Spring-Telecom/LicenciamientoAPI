@@ -53,13 +53,25 @@ export class Bitacora {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdModulo', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdModulo',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Bitacora_CatModulos',
+    },
+  ])
   idModulo2: CatModulos;
 
   @ManyToOne(() => Usuarios, (usuarios) => usuarios.bitacoras, {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdUsuario', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdUsuario',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Bitacora_Usuarios',
+    },
+  ])
   idUsuario2: Usuarios;
 }

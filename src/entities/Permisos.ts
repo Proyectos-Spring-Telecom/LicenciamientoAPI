@@ -34,7 +34,13 @@ export class Permisos {
     onDelete: 'NO ACTION',
     onUpdate: 'NO ACTION',
   })
-  @JoinColumn([{ name: 'IdModulo', referencedColumnName: 'id' }])
+  @JoinColumn([
+    {
+      name: 'IdModulo',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_Permisos_CatModulos',
+    },
+  ])
   idModulo2: CatModulos;
 
   @OneToMany(() => RolesPermisos, (rolesPermisos) => rolesPermisos.idPermiso2)
