@@ -17,7 +17,7 @@ export class ProteccionCivil {
   id: number;
 
   @Column('tinyint', { name: 'EsEmpresa', nullable: true, width: 1 })
-  esEmpresa: boolean | null;
+  esEmpresa: number | null;
 
   @Column('varchar', { name: 'RazonSocial', nullable: true, length: 191 })
   razonSocial: string | null;
@@ -45,7 +45,7 @@ export class ProteccionCivil {
   registroAcreditacion: string | null;
 
   @Column('tinyint', { name: 'TienePrograma', nullable: true, width: 1 })
-  tienePrograma: boolean | null;
+  tienePrograma: number | null;
 
   @Column('bigint', { name: 'IdRegistro', nullable: true })
   idRegistro: number | null;

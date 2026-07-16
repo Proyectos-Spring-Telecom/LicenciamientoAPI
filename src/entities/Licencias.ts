@@ -10,8 +10,6 @@ import { applySchema } from 'src/common/apply-schema.decorator';
 import { Registros } from './Registros';
 
 @applySchema
-@Index('FK_Licencias_Estatus', ['estatus'], {})
-@Index('FK_Licencias_Giro', ['idGiro'], {})
 @Index('IX_Licencias_IdRegistro', ['idRegistro'], {})
 @Entity('Licencias')
 export class Licencias {
@@ -24,8 +22,8 @@ export class Licencias {
   @Column('varchar', { name: 'NombreComercial', nullable: true, length: 191 })
   nombreComercial: string | null;
 
-  @Column('int', { name: 'IdGiro', nullable: true })
-  idGiro: number | null;
+  @Column('varchar', { name: 'Giro', nullable: true, length: 100 })
+  giro: string | null;
 
   @Column('varchar', { name: 'LicenciaSuelo', nullable: true, length: 50 })
   licenciaSuelo: string | null;
@@ -47,8 +45,8 @@ export class Licencias {
   })
   apellidoMaternoPropietario: string | null;
 
-  @Column('varchar', { name: 'RazonSocial', nullable: true, length: 191 })
-  razonSocial: string | null;
+  @Column('int', { name: 'TipoPersona', nullable: true })
+  tipoPersona: number | null;
 
   @Column('varchar', { name: 'RFC', nullable: true, length: 16 })
   rfc: string | null;
@@ -60,25 +58,13 @@ export class Licencias {
   fechaRefrendo: Date | null;
 
   @Column('tinyint', { name: 'Estacionamiento', nullable: true, width: 1 })
-  estacionamiento: boolean | null;
-
-  @Column('double', { name: 'Lat', nullable: true })
-  lat: number | null;
-
-  @Column('double', { name: 'Lng', nullable: true })
-  lng: number | null;
+  estacionamiento: number | null;
 
   @Column('int', { name: 'Tipo', nullable: true })
   tipo: number | null;
 
   @Column('datetime', { name: 'FechaHora', nullable: true })
   fechaHora: Date | null;
-
-  @Column('int', { name: 'Estatus', nullable: true })
-  estatus: number | null;
-
-  @Column('int', { name: 'TipoPersona', nullable: true })
-  tipoPersona: number | null;
 
   @Column('datetime', {
     name: 'FechaCreacion',
