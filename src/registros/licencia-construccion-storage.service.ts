@@ -19,6 +19,10 @@ import {
   MAX_DOCUMENTOS_POR_TIPO,
 } from './licencia-construccion.constants';
 import { assertValidRegistroFile } from './registro-file.validation';
+import {
+  buildPublicFileUrl,
+  resolvePublicBaseUrl,
+} from './storage-public-url';
 
 export type FirmaFiles = Partial<Record<FirmaKey, Express.Multer.File>>;
 
@@ -29,25 +33,32 @@ export type LcDocumentoFiles = Partial<
 export interface SavedFirmaFile {
   key: FirmaKey;
   idTipoFoto: number;
-  /** Ruta física absoluta normalizada (la misma usada al escribir el archivo). */
+  fileName: string;
+  /** Ruta física absoluta (escritura / cleanup). */
   absolutePath: string;
+  /** URL pública persistida en FotosLicenciaConstruccion.Ruta. */
+  publicUrl: string;
 }
 
 export interface SavedLcDocumentoFile {
   key: LcDocumentoKey;
   idTipoFoto: number;
+  fileName: string;
   absolutePath: string;
+  publicUrl: string;
 }
 
 @Injectable()
 export class LicenciaConstruccionStorageService implements OnModuleInit {
   private readonly logger = new Logger(LicenciaConstruccionStorageService.name);
   private basePath!: string;
+  private publicBaseUrl!: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   onModuleInit(): void {
     this.resolveBasePath();
+    this.resolvePublicUrl();
   }
 
   private resolveBasePath(): string {
@@ -66,11 +77,29 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
     return this.basePath;
   }
 
+  private resolvePublicUrl(): string {
+    try {
+      this.publicBaseUrl = resolvePublicBaseUrl(
+        this.configService.get<string>('LICENCIA_CONSTRUCCION_PUBLIC_URL'),
+      );
+      return this.publicBaseUrl;
+    } catch (error) {
+      this.logger.error(
+        'LICENCIA_CONSTRUCCION_PUBLIC_URL no está configurada o es inválida',
+      );
+      throw error;
+    }
+  }
+
   getBasePath(): string {
     if (!this.basePath) {
       return this.resolveBasePath();
     }
     return this.basePath;
+  }
+
+  private getPublicBaseUrl(): string {
+    return this.publicBaseUrl || this.resolvePublicUrl();
   }
 
   /** Valida archivos en memoria antes de abrir transacción. */
@@ -107,7 +136,6 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
     idRegistro: number,
     files: FirmaFiles,
   ): Promise<{ saved: SavedFirmaFile[]; absoluteCreated: string[] }> {
-    const base = this.getBasePath();
     const saved: SavedFirmaFile[] = [];
     const absoluteCreated: string[] = [];
 
@@ -119,18 +147,15 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
         this.assertValidFirmaFile(file, key);
 
         const idTipoFoto = FIRMA_TIPO_FOTO[key];
-        const absolutePath = await this.writeFile(
-          base,
-          idRegistro,
-          idTipoFoto,
-          file,
-        );
-        absoluteCreated.push(absolutePath);
+        const stored = await this.writeFile(idRegistro, idTipoFoto, file);
+        absoluteCreated.push(stored.absolutePath);
 
         saved.push({
           key,
           idTipoFoto,
-          absolutePath,
+          fileName: stored.fileName,
+          absolutePath: stored.absolutePath,
+          publicUrl: stored.publicUrl,
         });
       }
 
@@ -148,7 +173,6 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
     idRegistro: number,
     files: LcDocumentoFiles,
   ): Promise<{ saved: SavedLcDocumentoFile[]; absoluteCreated: string[] }> {
-    const base = this.getBasePath();
     const saved: SavedLcDocumentoFile[] = [];
     const absoluteCreated: string[] = [];
 
@@ -169,17 +193,14 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
         for (let index = 0; index < list.length; index++) {
           const file = list[index];
           this.assertValidFirmaFile(file, `${field.fieldName}[${index}]`);
-          const absolutePath = await this.writeFile(
-            base,
-            idRegistro,
-            idTipoFoto,
-            file,
-          );
-          absoluteCreated.push(absolutePath);
+          const stored = await this.writeFile(idRegistro, idTipoFoto, file);
+          absoluteCreated.push(stored.absolutePath);
           saved.push({
             key: field.key,
             idTipoFoto,
-            absolutePath,
+            fileName: stored.fileName,
+            absolutePath: stored.absolutePath,
+            publicUrl: stored.publicUrl,
           });
         }
       }
@@ -192,11 +213,15 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
   }
 
   private async writeFile(
-    base: string,
     idRegistro: number,
     idTipoFoto: number,
     file: Express.Multer.File,
-  ): Promise<string> {
+  ): Promise<{
+    fileName: string;
+    absolutePath: string;
+    publicUrl: string;
+  }> {
+    const base = this.getBasePath();
     const mime = file.mimetype.toLowerCase();
     const ext =
       FIRMA_EXT_BY_MIME[mime] ??
@@ -217,7 +242,19 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
     }
 
     await fs.writeFile(fullFilePath, file.buffer);
-    return fullFilePath;
+
+    const publicUrl = buildPublicFileUrl(
+      this.getPublicBaseUrl(),
+      idRegistro,
+      idTipoFoto,
+      fileName,
+    );
+
+    return {
+      fileName,
+      absolutePath: fullFilePath,
+      publicUrl,
+    };
   }
 
   async cleanup(absolutePaths: string[]): Promise<void> {
@@ -233,8 +270,7 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
             : undefined;
         if (code !== 'ENOENT') {
           this.logger.warn(
-            `No se pudo eliminar archivo temporal: ${
-              err instanceof Error ? err.message : String(err)
+            `No se pudo eliminar archivo temporal: ${err instanceof Error ? err.message : String(err)
             }`,
           );
         }

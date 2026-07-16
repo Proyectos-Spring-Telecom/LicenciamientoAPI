@@ -15,6 +15,10 @@ import {
   SAPAC_TIPO_FOTO,
   SapacFotoKey,
 } from './sapac.constants';
+import {
+  buildPublicFileUrl,
+  resolvePublicBaseUrl,
+} from './storage-public-url';
 
 export type SapacFotoFiles = Partial<
   Record<SapacFotoKey, Express.Multer.File>
@@ -29,7 +33,11 @@ export interface RegistroPhotoInput {
 export interface SavedRegistroPhoto {
   key: string;
   idTipoFoto: number;
+  fileName: string;
+  /** Ruta física absoluta (escritura / cleanup). */
   absolutePath: string;
+  /** URL pública persistida en Fotos.Ruta y response. */
+  publicUrl: string;
 }
 
 /** @deprecated alias de SavedRegistroPhoto para compatibilidad SAPAC */
@@ -37,17 +45,19 @@ export type SavedSapacFotoFile = SavedRegistroPhoto;
 
 /**
  * Almacenamiento físico bajo FOTOS_REGISTROS_STORAGE_PATH
- * para fotografías SAPAC y Catastro (tabla Fotos).
+ * y URL pública bajo FOTOS_REGISTROS_PUBLIC_URL (tabla Fotos).
  */
 @Injectable()
 export class SapacStorageService implements OnModuleInit {
   private readonly logger = new Logger(SapacStorageService.name);
   private basePath!: string;
+  private publicBaseUrl!: string;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   onModuleInit(): void {
     this.resolveBasePath();
+    this.resolvePublicUrl();
   }
 
   private resolveBasePath(): string {
@@ -62,8 +72,24 @@ export class SapacStorageService implements OnModuleInit {
     return this.basePath;
   }
 
+  private resolvePublicUrl(): string {
+    try {
+      this.publicBaseUrl = resolvePublicBaseUrl(
+        this.configService.get<string>('FOTOS_REGISTROS_PUBLIC_URL'),
+      );
+      return this.publicBaseUrl;
+    } catch (error) {
+      this.logger.error('FOTOS_REGISTROS_PUBLIC_URL no está configurada o es inválida');
+      throw error;
+    }
+  }
+
   private getBasePath(): string {
     return this.basePath || this.resolveBasePath();
+  }
+
+  private getPublicBaseUrl(): string {
+    return this.publicBaseUrl || this.resolvePublicUrl();
   }
 
   assertValidFiles(files: SapacFotoFiles): void {
@@ -82,12 +108,14 @@ export class SapacStorageService implements OnModuleInit {
   /**
    * Guarda uno o más archivos en:
    * {base}/{IdRegistro}/{IdTipoFoto}/{uuid}.ext
+   * y construye URL pública equivalente.
    */
   async saveRegistroPhotos(
     idRegistro: number,
     items: RegistroPhotoInput[],
   ): Promise<{ saved: SavedRegistroPhoto[]; absoluteCreated: string[] }> {
     const base = this.getBasePath();
+    const publicBase = this.getPublicBaseUrl();
     const saved: SavedRegistroPhoto[] = [];
     const absoluteCreated: string[] = [];
 
@@ -101,6 +129,7 @@ export class SapacStorageService implements OnModuleInit {
           );
         }
 
+        const fileName = `${randomUUID()}${ext}`;
         const targetDirectory = path.join(
           base,
           String(idRegistro),
@@ -109,7 +138,7 @@ export class SapacStorageService implements OnModuleInit {
         await fs.mkdir(targetDirectory, { recursive: true });
 
         const fullFilePath = path.normalize(
-          path.join(targetDirectory, `${randomUUID()}${ext}`),
+          path.join(targetDirectory, fileName),
         );
         const resolved = path.resolve(fullFilePath);
         if (!resolved.startsWith(path.resolve(base) + path.sep)) {
@@ -118,10 +147,20 @@ export class SapacStorageService implements OnModuleInit {
 
         await fs.writeFile(fullFilePath, item.file.buffer);
         absoluteCreated.push(fullFilePath);
+
+        const publicUrl = buildPublicFileUrl(
+          publicBase,
+          idRegistro,
+          item.idTipoFoto,
+          fileName,
+        );
+
         saved.push({
           key: item.key,
           idTipoFoto: item.idTipoFoto,
+          fileName,
           absolutePath: fullFilePath,
+          publicUrl,
         });
       }
 
@@ -163,8 +202,7 @@ export class SapacStorageService implements OnModuleInit {
             : undefined;
         if (code !== 'ENOENT') {
           this.logger.warn(
-            `No se pudo eliminar archivo temporal: ${
-              error instanceof Error ? error.message : String(error)
+            `No se pudo eliminar archivo temporal: ${error instanceof Error ? error.message : String(error)
             }`,
           );
         }
