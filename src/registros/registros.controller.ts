@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   Post,
+  Query,
   Request,
   UploadedFiles,
   UseGuards,
@@ -16,19 +18,21 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
-import { ApiCrudResponse } from 'src/common/ApiResponse';
+import { ApiCrudResponse, ApiResponseCommon } from 'src/common/ApiResponse';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import {
   FIRMA_FIELD_NAMES,
   LC_DOCUMENTO_FIELD_NAMES,
   MAX_DOCUMENTOS_POR_TIPO,
 } from './licencia-construccion.constants';
+import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import { RegistrosService } from './registros.service';
 import { SAPAC_FILE_FIELD_NAMES } from './sapac.constants';
 import { CATASTRO_FILE_FIELD_NAMES } from './catastro.constants';
@@ -70,6 +74,43 @@ const multiBinaryFiles = {
 @Controller('registros')
 export class RegistrosController {
   constructor(private readonly registrosService: RegistrosService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'Listar registros paginados',
+    description: `
+Consulta únicamente la tabla \`Registros\` (sin joins ni relaciones).
+
+Parámetros opcionales: \`page\` (default 1) y \`limit\` (default 10, máximo 100).
+Orden: FechaCreacion DESC, Id DESC.
+`,
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Número de página. El valor mínimo es 1.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Cantidad de registros por página. Máximo 100.',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Lista paginada de Registros (solo columnas de la tabla Registros)',
+  })
+  @ApiResponse({ status: 400, description: 'Parámetros de paginación inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  findAllPaginated(
+    @Query() query: GetRegistrosQueryDto,
+  ): Promise<ApiResponseCommon> {
+    return this.registrosService.findAllPaginated(query);
+  }
 
   @Post()
   @HttpCode(201)
