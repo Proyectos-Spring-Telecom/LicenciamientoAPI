@@ -15,42 +15,7 @@ import { parseRegistroMultipart } from './registro-form.parser';
 import { LICENCIAS_FILE_FIELD_NAMES } from './licencias.constants';
 import { PROTECCION_CIVIL_FILE_FIELD_NAMES } from './proteccion-civil.constants';
 import { SAPAC_FILE_FIELD_NAMES } from './sapac.constants';
-import { buildPublicFileUrl, resolvePublicBaseUrl } from './storage-public-url';
 import { SapacStorageService } from './sapac-storage.service';
-
-describe('buildPublicFileUrl', () => {
-  it('elimina barras finales y usa separadores /', () => {
-    expect(
-      buildPublicFileUrl(
-        'https://springtelecom.mx/registros/data/',
-        25,
-        9,
-        'archivo.pdf',
-      ),
-    ).toBe('https://springtelecom.mx/registros/data/25/9/archivo.pdf');
-  });
-
-  it('no introduce barras invertidas', () => {
-    const url = buildPublicFileUrl(
-      'https://springtelecom.mx/registros/data',
-      10,
-      3,
-      'uuid.jpg',
-    );
-    expect(url.includes('\\')).toBe(false);
-    expect(url.startsWith('https://')).toBe(true);
-  });
-});
-
-describe('resolvePublicBaseUrl', () => {
-  it('rechaza URL inválida', () => {
-    expect(() => resolvePublicBaseUrl('no-es-url')).toThrow();
-  });
-
-  it('rechaza valor vacío', () => {
-    expect(() => resolvePublicBaseUrl('   ')).toThrow();
-  });
-});
 
 function baseBody(predioObra: 0 | 1): Record<string, unknown> {
   return {
@@ -659,16 +624,13 @@ describe('Flujo ProteccionCivil de registros', () => {
 describe('SapacStorageService / FotosRegistros', () => {
   let basePath: string;
   let service: SapacStorageService;
-  const publicUrl = 'https://springtelecom.mx/registros/data';
 
   beforeEach(async () => {
     basePath = await fs.mkdtemp(path.join(os.tmpdir(), 'fotos-registros-'));
     const config = {
-      get: jest.fn((key: string) => {
-        if (key === 'FOTOS_REGISTROS_STORAGE_PATH') return basePath;
-        if (key === 'FOTOS_REGISTROS_PUBLIC_URL') return publicUrl;
-        return undefined;
-      }),
+      get: jest.fn((key: string) =>
+        key === 'FOTOS_REGISTROS_STORAGE_PATH' ? basePath : undefined,
+      ),
     } as unknown as ConfigService;
     service = new SapacStorageService(config);
     service.onModuleInit();
@@ -690,11 +652,6 @@ describe('SapacStorageService / FotosRegistros', () => {
     expect(saved[0].absolutePath).toContain(path.join('10', '3') + path.sep);
     await expect(fs.access(saved[0].absolutePath)).resolves.toBeUndefined();
     expect(absoluteCreated[0]).toBe(saved[0].absolutePath);
-    expect(saved[0].publicUrl).toBe(
-      `${publicUrl}/10/3/${saved[0].fileName}`,
-    );
-    expect(saved[0].publicUrl.startsWith('https://')).toBe(true);
-    expect(saved[0].publicUrl.includes('\\')).toBe(false);
 
     await service.cleanup(absoluteCreated);
     await expect(fs.access(saved[0].absolutePath)).rejects.toBeDefined();
@@ -713,9 +670,6 @@ describe('SapacStorageService / FotosRegistros', () => {
     expect(saved[0].idTipoFoto).toBe(2);
     expect(saved[0].absolutePath).toContain(path.join('15', '2') + path.sep);
     expect(absoluteCreated[0]).toBe(saved[0].absolutePath);
-    expect(saved[0].publicUrl).toBe(
-      `${publicUrl}/15/2/${saved[0].fileName}`,
-    );
     await expect(fs.access(saved[0].absolutePath)).resolves.toBeUndefined();
   });
 
@@ -729,7 +683,6 @@ describe('SapacStorageService / FotosRegistros', () => {
     ]);
     expect(saved[0].idTipoFoto).toBe(1);
     expect(saved[0].absolutePath).toContain(path.join('25', '1') + path.sep);
-    expect(saved[0].publicUrl).toContain('/25/1/');
   });
 
   it('guarda vistoBueno con IdTipoFoto=9', async () => {
@@ -748,9 +701,6 @@ describe('SapacStorageService / FotosRegistros', () => {
     expect(saved[0].idTipoFoto).toBe(9);
     expect(saved[0].absolutePath).toContain(path.join('30', '9') + path.sep);
     expect(saved[0].absolutePath.endsWith('.pdf')).toBe(true);
-    expect(saved[0].publicUrl).toMatch(
-      /^https:\/\/springtelecom\.mx\/registros\/data\/30\/9\/.+\.pdf$/,
-    );
   });
 
   it('rechaza archivos vacíos', async () => {
@@ -1016,17 +966,13 @@ describe('Documentos múltiples de LicenciaConstruccion', () => {
 describe('LicenciaConstruccionStorageService / documentos múltiples', () => {
   let basePath: string;
   let service: LicenciaConstruccionStorageService;
-  const publicUrl =
-    'https://springtelecom.mx/registros/data/FotosLicenciaConstruccion';
 
   beforeEach(async () => {
     basePath = await fs.mkdtemp(path.join(os.tmpdir(), 'fotos-lc-docs-'));
     const config = {
-      get: jest.fn((key: string) => {
-        if (key === 'LICENCIA_CONSTRUCCION_STORAGE_PATH') return basePath;
-        if (key === 'LICENCIA_CONSTRUCCION_PUBLIC_URL') return publicUrl;
-        return undefined;
-      }),
+      get: jest.fn((key: string) =>
+        key === 'LICENCIA_CONSTRUCCION_STORAGE_PATH' ? basePath : undefined,
+      ),
     } as unknown as ConfigService;
     service = new LicenciaConstruccionStorageService(config);
     service.onModuleInit();
@@ -1059,10 +1005,6 @@ describe('LicenciaConstruccionStorageService / documentos múltiples', () => {
     expect(path.isAbsolute(saved[0].absolutePath)).toBe(true);
     await expect(fs.access(saved[0].absolutePath)).resolves.toBeUndefined();
     expect(absoluteCreated).toHaveLength(2);
-    expect(saved[0].publicUrl).toBe(
-      `${publicUrl}/40/10/${saved[0].fileName}`,
-    );
-    expect(saved[0].publicUrl.includes('\\')).toBe(false);
   });
 
   it('asigna IdTipoFoto correcto por atributo', async () => {
