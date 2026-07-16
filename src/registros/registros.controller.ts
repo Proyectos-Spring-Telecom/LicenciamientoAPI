@@ -33,6 +33,7 @@ import {
   MAX_DOCUMENTOS_POR_TIPO,
 } from './licencia-construccion.constants';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
+import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { RegistrosService } from './registros.service';
 import { SAPAC_FILE_FIELD_NAMES } from './sapac.constants';
 import { CATASTRO_FILE_FIELD_NAMES } from './catastro.constants';
@@ -122,6 +123,47 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
     @Request() req: { user: AuthenticatedUser },
   ): Promise<ApiResponseCommon> {
     return this.registrosService.findAllPaginated(query, req.user);
+  }
+
+  @Post('por-rango-fechas')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Obtiene registros por rango de fechas',
+    description: `
+Obtiene los registros creados dentro del rango solicitado (\`Registros.FechaCreacion\`).
+El body solo acepta \`fechaInicio\` y \`fechaFin\` (YYYY-MM-DD).
+La visibilidad depende del rol contenido en el JWT:
+
+- Rol 4: todos los registros del rango.
+- Rol 3: todos los registros del rango.
+- Rol 2: registros del rango asociados a su grupo.
+- Rol 1: registros del rango capturados por el usuario.
+
+Rango inclusivo: desde fechaInicio 00:00:00 hasta el final de fechaFin
+(límite superior exclusivo = día siguiente 00:00:00).
+No se aceptan idRol, idGrupo ni idUsuario en el body.
+`,
+  })
+  @ApiBody({ type: GetRegistrosByDateRangeDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de Registros dentro del rango (solo columnas de Registros)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Fechas inválidas o fechaInicio mayor que fechaFin',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Rol no autorizado, supervisor sin grupo, o usuario no identificable',
+  })
+  findByDateRange(
+    @Body() dto: GetRegistrosByDateRangeDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.registrosService.findByDateRange(dto, req.user);
   }
 
   @Post()
