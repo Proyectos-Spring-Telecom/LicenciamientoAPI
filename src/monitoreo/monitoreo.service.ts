@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
+import { RegistroFotoResponseDto } from 'src/common/dto/registro-foto-response.dto';
 import { CapturistaVisita } from 'src/entities/CapturistaVisita';
 import { Catastro } from 'src/entities/Catastro';
 import { ContactoRepresentante } from 'src/entities/ContactoRepresentante';
@@ -16,6 +17,7 @@ import { Contactos } from 'src/entities/Contactos';
 import { Corresponsables } from 'src/entities/Corresponsables';
 import { Fotos } from 'src/entities/Fotos';
 import { FotosLicenciaConstruccion } from 'src/entities/FotosLicenciaConstruccion';
+import { Grupos } from 'src/entities/Grupos';
 import { LicenciaConstruccion } from 'src/entities/LicenciaConstruccion';
 import { Licencias } from 'src/entities/Licencias';
 import { ProteccionCivil } from 'src/entities/ProteccionCivil';
@@ -32,6 +34,13 @@ import { PROTECCION_CIVIL_TIPO_FOTO } from 'src/registros/proteccion-civil.const
 import { SAPAC_TIPO_FOTO } from 'src/registros/sapac.constants';
 import { MonitoreoListadoItemDto } from './dto/monitoreo-listado-item.dto';
 
+/** Fotos de fachada/estacionamiento/bodega en listados y detalle plano. */
+const FOTOS_TIPOS_LISTADO = [
+  LICENCIAS_TIPO_FOTO.fachada,
+  LICENCIAS_TIPO_FOTO.estacionamiento,
+  LICENCIAS_TIPO_FOTO.bodega,
+] as const;
+
 type FotoRow = { id: number; idTipoFoto: number | null; ruta: string | null };
 
 type CapturistaVisitaFlatFields = {
@@ -42,19 +51,25 @@ type CapturistaVisitaFlatFields = {
   apellidoPaternoCapturista: string | null;
   apellidoMaternoCapturista: string | null;
   nombreCompletoCapturista: string | null;
+  idGrupoCapturista: number | null;
+  nombreGrupoCapturista: string | null;
   idSupervisor: number | null;
   nombreSupervisor: string | null;
   apellidoPaternoSupervisor: string | null;
   apellidoMaternoSupervisor: string | null;
   nombreCompletoSupervisor: string | null;
+  idGrupoSupervisor: number | null;
+  nombreGrupoSupervisor: string | null;
   idGrupoCapturistaVisita: number | null;
   fechaHoraCapturistaVisita: Date | null;
 };
 
 type UsuarioNombre = Pick<
   Usuarios,
-  'id' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno'
+  'id' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno' | 'idGrupo'
 >;
+
+type GrupoNombre = Pick<Grupos, 'id' | 'nombre'>;
 
 @Injectable()
 export class MonitoreoService {
@@ -65,6 +80,8 @@ export class MonitoreoService {
     private readonly capturistaVisitaRepository: Repository<CapturistaVisita>,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
+    @InjectRepository(Grupos)
+    private readonly gruposRepository: Repository<Grupos>,
     @InjectRepository(Sapac)
     private readonly sapacRepository: Repository<Sapac>,
     @InjectRepository(Catastro)
@@ -181,10 +198,12 @@ export class MonitoreoService {
 
       const registros = await queryBuilder.getMany();
       const idsRegistro = registros.map((registro) => Number(registro.id));
-      const [licenciasByRegistroId, visitasByRegistroId] = await Promise.all([
-        this.loadLicenciasByRegistroIds(idsRegistro),
-        this.loadCapturistaVisitaFieldsByRegistroIds(idsRegistro),
-      ]);
+      const [licenciasByRegistroId, visitasByRegistroId, fotosByRegistroId] =
+        await Promise.all([
+          this.loadLicenciasByRegistroIds(idsRegistro),
+          this.loadCapturistaVisitaFieldsByRegistroIds(idsRegistro),
+          this.loadFotosListadoByRegistroIds(idsRegistro),
+        ]);
 
       return registros.map((registro) =>
         this.mapListItem(
@@ -192,6 +211,7 @@ export class MonitoreoService {
           licenciasByRegistroId.get(Number(registro.id)) ?? null,
           visitasByRegistroId.get(Number(registro.id)) ??
             this.buildNullCapturistaVisitaFields(),
+          fotosByRegistroId.get(Number(registro.id)) ?? [],
         ),
       );
     } catch (error) {
@@ -260,14 +280,16 @@ export class MonitoreoService {
 
       await this.assertRegistroVisibleByRole(idRegistro, user);
 
-      const visitaFields = await this.loadCapturistaVisitaDetailFields(
-        idRegistro,
-      );
+      const [visitaFields, fotosByRegistroId] = await Promise.all([
+        this.loadCapturistaVisitaDetailFields(idRegistro),
+        this.loadFotosListadoByRegistroIds([idRegistro]),
+      ]);
 
-      const base = {
-        ...this.mapRegistroDetail(registro),
-        ...visitaFields,
-      };
+      const base = this.mapRegistroDetailWithRelations(
+        registro,
+        visitaFields,
+        fotosByRegistroId.get(idRegistro) ?? [],
+      );
 
       if (Number(registro.predioObra) === 0) {
         return {
@@ -418,10 +440,18 @@ export class MonitoreoService {
 
     const usuariosById = await this.loadUsuariosNombreByIds([...idsUsuario]);
 
+    const idsGrupo = new Set<number>();
+    for (const usuario of usuariosById.values()) {
+      if (usuario.idGrupo != null) {
+        idsGrupo.add(Number(usuario.idGrupo));
+      }
+    }
+    const gruposById = await this.loadGruposNombreByIds([...idsGrupo]);
+
     for (const [idRegistro, visita] of visitaByRegistroId) {
       result.set(
         idRegistro,
-        this.mapCapturistaVisitaFields(visita, usuariosById),
+        this.mapCapturistaVisitaFields(visita, usuariosById, gruposById),
       );
     }
 
@@ -438,7 +468,7 @@ export class MonitoreoService {
 
     const usuarios = await this.usuariosRepository.find({
       where: { id: In(idsUsuario) },
-      select: ['id', 'nombre', 'apellidoPaterno', 'apellidoMaterno'],
+      select: ['id', 'nombre', 'apellidoPaterno', 'apellidoMaterno', 'idGrupo'],
     });
 
     for (const usuario of usuarios) {
@@ -448,9 +478,82 @@ export class MonitoreoService {
     return map;
   }
 
+  private async loadGruposNombreByIds(
+    idsGrupo: number[],
+  ): Promise<Map<number, GrupoNombre>> {
+    const map = new Map<number, GrupoNombre>();
+    if (idsGrupo.length === 0) {
+      return map;
+    }
+
+    const grupos = await this.gruposRepository.find({
+      where: { id: In(idsGrupo) },
+      select: ['id', 'nombre'],
+    });
+
+    for (const grupo of grupos) {
+      map.set(Number(grupo.id), grupo);
+    }
+
+    return map;
+  }
+
+  /**
+   * Fotos tipos 6/7/8 por lote. Orden: IdTipoFoto, FechaHora, Id ASC.
+   */
+  private async loadFotosListadoByRegistroIds(
+    idsRegistro: number[],
+  ): Promise<Map<number, RegistroFotoResponseDto[]>> {
+    const map = new Map<number, RegistroFotoResponseDto[]>();
+    if (idsRegistro.length === 0) {
+      return map;
+    }
+
+    const fotos = await this.fotosRepository
+      .createQueryBuilder('foto')
+      .select([
+        'foto.id',
+        'foto.idRegistro',
+        'foto.ruta',
+        'foto.fechaHora',
+        'foto.idTipoFoto',
+      ])
+      .where('foto.idRegistro IN (:...idsRegistro)', { idsRegistro })
+      .andWhere('foto.idTipoFoto IN (:...tiposFoto)', {
+        tiposFoto: [...FOTOS_TIPOS_LISTADO],
+      })
+      .orderBy('foto.idTipoFoto', 'ASC')
+      .addOrderBy('foto.fechaHora', 'ASC')
+      .addOrderBy('foto.id', 'ASC')
+      .getMany();
+
+    for (const foto of fotos) {
+      if (foto.idRegistro == null || foto.idTipoFoto == null) {
+        continue;
+      }
+      const idRegistro = Number(foto.idRegistro);
+      const idFoto = Number(foto.id);
+      const listado = map.get(idRegistro) ?? [];
+      if (listado.some((item) => item.id === idFoto)) {
+        continue;
+      }
+      listado.push({
+        id: idFoto,
+        idRegistro,
+        ruta: foto.ruta ?? null,
+        fechaHora: foto.fechaHora ?? null,
+        idTipoFoto: Number(foto.idTipoFoto),
+      });
+      map.set(idRegistro, listado);
+    }
+
+    return map;
+  }
+
   private mapCapturistaVisitaFields(
     visita: CapturistaVisita,
     usuariosById: Map<number, UsuarioNombre>,
+    gruposById: Map<number, GrupoNombre>,
   ): CapturistaVisitaFlatFields {
     const idCapturista =
       visita.idCapturista != null ? Number(visita.idCapturista) : null;
@@ -470,6 +573,20 @@ export class MonitoreoService {
     const apellidoPaternoSupervisor = supervisor?.apellidoPaterno ?? null;
     const apellidoMaternoSupervisor = supervisor?.apellidoMaterno ?? null;
 
+    const idGrupoCapturista =
+      capturista?.idGrupo != null ? Number(capturista.idGrupo) : null;
+    const idGrupoSupervisor =
+      supervisor?.idGrupo != null ? Number(supervisor.idGrupo) : null;
+
+    const grupoCapturista =
+      idGrupoCapturista != null
+        ? (gruposById.get(idGrupoCapturista) ?? null)
+        : null;
+    const grupoSupervisor =
+      idGrupoSupervisor != null
+        ? (gruposById.get(idGrupoSupervisor) ?? null)
+        : null;
+
     return {
       idCapturistaVisita: Number(visita.id),
       idRegistroCapturistaVisita:
@@ -483,6 +600,8 @@ export class MonitoreoService {
         apellidoPaternoCapturista,
         apellidoMaternoCapturista,
       ),
+      idGrupoCapturista,
+      nombreGrupoCapturista: grupoCapturista?.nombre ?? null,
       idSupervisor,
       nombreSupervisor,
       apellidoPaternoSupervisor,
@@ -492,6 +611,8 @@ export class MonitoreoService {
         apellidoPaternoSupervisor,
         apellidoMaternoSupervisor,
       ),
+      idGrupoSupervisor,
+      nombreGrupoSupervisor: grupoSupervisor?.nombre ?? null,
       idGrupoCapturistaVisita:
         visita.idGrupo != null ? Number(visita.idGrupo) : null,
       fechaHoraCapturistaVisita: visita.fechaHora ?? null,
@@ -507,11 +628,15 @@ export class MonitoreoService {
       apellidoPaternoCapturista: null,
       apellidoMaternoCapturista: null,
       nombreCompletoCapturista: null,
+      idGrupoCapturista: null,
+      nombreGrupoCapturista: null,
       idSupervisor: null,
       nombreSupervisor: null,
       apellidoPaternoSupervisor: null,
       apellidoMaternoSupervisor: null,
       nombreCompletoSupervisor: null,
+      idGrupoSupervisor: null,
+      nombreGrupoSupervisor: null,
       idGrupoCapturistaVisita: null,
       fechaHoraCapturistaVisita: null,
     };
@@ -690,6 +815,60 @@ export class MonitoreoService {
       estatus: registro.estatus ?? null,
       fechaCreacion: registro.fechaCreacion ?? null,
       fechaActualizacion: registro.fechaActualizacion ?? null,
+    };
+  }
+
+  /**
+   * Detalle plano: Registros + visita/capturista/supervisor/grupos + fotos.
+   * Cada clave se declara una sola vez (sin spread de entidades).
+   */
+  private mapRegistroDetailWithRelations(
+    registro: Registros,
+    visitaFields: CapturistaVisitaFlatFields,
+    fotos: RegistroFotoResponseDto[],
+  ) {
+    const base = this.mapRegistroDetail(registro);
+    return {
+      id: base.id,
+      registro: base.registro,
+      latitud: base.latitud,
+      longitud: base.longitud,
+      entidadFederativa: base.entidadFederativa,
+      municipio: base.municipio,
+      localidad: base.localidad,
+      colonia: base.colonia,
+      calle: base.calle,
+      noInterior: base.noInterior,
+      noExterior: base.noExterior,
+      cp: base.cp,
+      tipoRegistro: base.tipoRegistro,
+      predioObra: base.predioObra,
+      estatus: base.estatus,
+      fechaCreacion: base.fechaCreacion,
+      fechaActualizacion: base.fechaActualizacion,
+
+      idCapturistaVisita: visitaFields.idCapturistaVisita,
+      idRegistroCapturistaVisita: visitaFields.idRegistroCapturistaVisita,
+      idGrupoCapturistaVisita: visitaFields.idGrupoCapturistaVisita,
+      fechaHoraCapturistaVisita: visitaFields.fechaHoraCapturistaVisita,
+
+      idCapturista: visitaFields.idCapturista,
+      nombreCapturista: visitaFields.nombreCapturista,
+      apellidoPaternoCapturista: visitaFields.apellidoPaternoCapturista,
+      apellidoMaternoCapturista: visitaFields.apellidoMaternoCapturista,
+      nombreCompletoCapturista: visitaFields.nombreCompletoCapturista,
+      idGrupoCapturista: visitaFields.idGrupoCapturista,
+      nombreGrupoCapturista: visitaFields.nombreGrupoCapturista,
+
+      idSupervisor: visitaFields.idSupervisor,
+      nombreSupervisor: visitaFields.nombreSupervisor,
+      apellidoPaternoSupervisor: visitaFields.apellidoPaternoSupervisor,
+      apellidoMaternoSupervisor: visitaFields.apellidoMaternoSupervisor,
+      nombreCompletoSupervisor: visitaFields.nombreCompletoSupervisor,
+      idGrupoSupervisor: visitaFields.idGrupoSupervisor,
+      nombreGrupoSupervisor: visitaFields.nombreGrupoSupervisor,
+
+      fotos,
     };
   }
 
@@ -908,6 +1087,7 @@ export class MonitoreoService {
     registro: Registros,
     licencia: Licencias | null,
     visitaFields: CapturistaVisitaFlatFields,
+    fotos: RegistroFotoResponseDto[],
   ): MonitoreoListadoItemDto {
     return {
       id: Number(registro.id),
@@ -950,7 +1130,28 @@ export class MonitoreoService {
       fechaCreacionLicencia: licencia?.fechaCreacion ?? null,
       fechaActualizacionLicencia: licencia?.fechaActualizacion ?? null,
 
-      ...visitaFields,
+      idCapturistaVisita: visitaFields.idCapturistaVisita,
+      idRegistroCapturistaVisita: visitaFields.idRegistroCapturistaVisita,
+      idGrupoCapturistaVisita: visitaFields.idGrupoCapturistaVisita,
+      fechaHoraCapturistaVisita: visitaFields.fechaHoraCapturistaVisita,
+
+      idCapturista: visitaFields.idCapturista,
+      nombreCapturista: visitaFields.nombreCapturista,
+      apellidoPaternoCapturista: visitaFields.apellidoPaternoCapturista,
+      apellidoMaternoCapturista: visitaFields.apellidoMaternoCapturista,
+      nombreCompletoCapturista: visitaFields.nombreCompletoCapturista,
+      idGrupoCapturista: visitaFields.idGrupoCapturista,
+      nombreGrupoCapturista: visitaFields.nombreGrupoCapturista,
+
+      idSupervisor: visitaFields.idSupervisor,
+      nombreSupervisor: visitaFields.nombreSupervisor,
+      apellidoPaternoSupervisor: visitaFields.apellidoPaternoSupervisor,
+      apellidoMaternoSupervisor: visitaFields.apellidoMaternoSupervisor,
+      nombreCompletoSupervisor: visitaFields.nombreCompletoSupervisor,
+      idGrupoSupervisor: visitaFields.idGrupoSupervisor,
+      nombreGrupoSupervisor: visitaFields.nombreGrupoSupervisor,
+
+      fotos,
     };
   }
 }

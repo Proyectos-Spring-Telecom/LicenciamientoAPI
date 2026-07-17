@@ -4,6 +4,7 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, In, SelectQueryBuilder } from 'typeorm';
@@ -15,6 +16,7 @@ import {
   EstatusEnumBitcora,
 } from 'src/common/ApiResponse';
 import { EnumModulos } from 'src/common/estatus.enum';
+import { RegistroFotoResponseDto } from 'src/common/dto/registro-foto-response.dto';
 import { CapturistaVisita } from 'src/entities/CapturistaVisita';
 import { Catastro } from 'src/entities/Catastro';
 import { ContactoRepresentante } from 'src/entities/ContactoRepresentante';
@@ -22,6 +24,7 @@ import { Contactos } from 'src/entities/Contactos';
 import { Corresponsables } from 'src/entities/Corresponsables';
 import { Fotos } from 'src/entities/Fotos';
 import { FotosLicenciaConstruccion } from 'src/entities/FotosLicenciaConstruccion';
+import { Grupos } from 'src/entities/Grupos';
 import { LicenciaConstruccion } from 'src/entities/LicenciaConstruccion';
 import { Licencias } from 'src/entities/Licencias';
 import { ProteccionCivil } from 'src/entities/ProteccionCivil';
@@ -29,6 +32,7 @@ import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
 import { TipoFoto } from 'src/entities/TipoFoto';
 import { Usuarios } from 'src/entities/Usuarios';
+import { MonitoreoService } from 'src/monitoreo/monitoreo.service';
 import {
   CATASTRO_TIPO_FOTO,
   CatastroFotoKey,
@@ -44,6 +48,7 @@ import { CreateSapacDto } from './dto/create-sapac.dto';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import { RegistroListadoItemDto } from './dto/registro-listado-item.dto';
+import { UpdateRegistroEstatusDto } from './dto/update-registro-estatus.dto';
 import {
   buildEndExclusiveDateLocal,
   buildStartDateLocal,
@@ -87,6 +92,14 @@ import {
 
 const ESTATUS_ALTA = 4;
 
+const REGISTRO_ESTATUS_DESCRIPCIONES: Record<number, string> = {
+  1: 'Información Faltante',
+  2: 'Rechazo o Sin respuesta',
+  3: 'Datos Correctos',
+  4: 'Revisión',
+  5: 'Baja',
+};
+
 export interface FotoLicenciaResultado {
   id: number;
   idTipoFoto: number;
@@ -125,6 +138,40 @@ export interface CreateRegistroResultData {
   fotosLicenciaConstruccion?: FotoLicenciaResultado[];
 }
 
+type CapturistaVisitaFlatFields = {
+  idCapturistaVisita: number | null;
+  idRegistroCapturistaVisita: number | null;
+  idCapturista: number | null;
+  nombreCapturista: string | null;
+  apellidoPaternoCapturista: string | null;
+  apellidoMaternoCapturista: string | null;
+  nombreCompletoCapturista: string | null;
+  idGrupoCapturista: number | null;
+  nombreGrupoCapturista: string | null;
+  idSupervisor: number | null;
+  nombreSupervisor: string | null;
+  apellidoPaternoSupervisor: string | null;
+  apellidoMaternoSupervisor: string | null;
+  nombreCompletoSupervisor: string | null;
+  idGrupoSupervisor: number | null;
+  nombreGrupoSupervisor: string | null;
+  idGrupoCapturistaVisita: number | null;
+  fechaHoraCapturistaVisita: Date | null;
+};
+
+type UsuarioNombre = Pick<
+  Usuarios,
+  'id' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno' | 'idGrupo'
+>;
+
+type GrupoNombre = Pick<Grupos, 'id' | 'nombre'>;
+
+/** Fotos de fachada/estacionamiento/bodega en listados de consulta. */
+const FOTOS_TIPOS_LISTADO = [
+  LICENCIAS_TIPO_FOTO.fachada,
+  LICENCIAS_TIPO_FOTO.estacionamiento,
+  LICENCIAS_TIPO_FOTO.bodega,
+] as const;
 
 @Injectable()
 export class RegistrosService {
@@ -133,12 +180,192 @@ export class RegistrosService {
     private readonly bitacoraLogger: BitacoraLoggerService,
     private readonly storageService: LicenciaConstruccionStorageService,
     private readonly sapacStorageService: SapacStorageService,
+    private readonly monitoreoService: MonitoreoService,
   ) { }
 
   /**
-   * Lista paginada de Registros + Licencias (plano) con visibilidad según rol:
-   * 4/3 = todos; 2 = por IdGrupo; 1 = por IdCapturista.
-   * CapturistaVisita solo se usa como filtro (INNER JOIN), no se devuelve.
+   * Detalle completo por Id (mismo contrato que GET /monitoreo/:idRegistro).
+   * Reutiliza MonitoreoService como fuente de verdad de relaciones y mapper.
+   */
+  async findOne(
+    idRegistro: number,
+    user: AuthenticatedUser,
+  ): Promise<{ data: Record<string, unknown> }> {
+    try {
+      return await this.monitoreoService.findOne(idRegistro, user);
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(
+          'No se encontró el registro solicitado.',
+        );
+      }
+      if (error instanceof ForbiddenException) {
+        const message =
+          typeof error.message === 'string' ? error.message : '';
+        if (message.includes('monitoreo')) {
+          throw new ForbiddenException(
+            'No tienes permisos para consultar los registros.',
+          );
+        }
+        if (message.includes('grupo asignado')) {
+          throw error;
+        }
+        if (message.includes('identificar al usuario')) {
+          throw error;
+        }
+        throw new ForbiddenException(
+          'No tienes permisos para consultar los registros.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  async updateEstatus(
+    idRegistro: number,
+    dto: UpdateRegistroEstatusDto,
+    user: AuthenticatedUser,
+  ): Promise<{
+    message: string;
+    data: {
+      idRegistro: number;
+      estatus: number;
+      descripcionEstatus: string;
+      idSupervisor: number;
+    };
+  }> {
+    if (!Number.isInteger(idRegistro) || idRegistro < 1) {
+      throw new BadRequestException(
+        'El identificador del registro no es válido.',
+      );
+    }
+
+    const idUsuario = user.userId;
+    if (
+      idUsuario === undefined ||
+      idUsuario === null ||
+      !Number.isInteger(Number(idUsuario)) ||
+      Number(idUsuario) < 1
+    ) {
+      throw new UnauthorizedException(
+        'No fue posible identificar al usuario autenticado.',
+      );
+    }
+
+    const idRol = Number(user.rol);
+    if (![2, 3, 4].includes(idRol)) {
+      throw new ForbiddenException(
+        'No tienes permisos para actualizar el estatus del registro.',
+      );
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    let transactionStarted = false;
+
+    try {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      transactionStarted = true;
+
+      const registro = await queryRunner.manager.findOne(Registros, {
+        where: { id: idRegistro },
+      });
+
+      if (!registro) {
+        throw new NotFoundException(
+          'No se encontró el registro solicitado.',
+        );
+      }
+
+      if (idRol === 2) {
+        const idGrupo = user.idGrupo;
+        if (
+          idGrupo === undefined ||
+          idGrupo === null ||
+          String(idGrupo).trim() === ''
+        ) {
+          throw new ForbiddenException(
+            'El usuario supervisor no tiene un grupo asignado.',
+          );
+        }
+
+        const visitaDelGrupo = await queryRunner.manager.findOne(
+          CapturistaVisita,
+          {
+            where: { idRegistro, idGrupo },
+            order: { fechaHora: 'DESC', id: 'DESC' },
+          },
+        );
+
+        if (!visitaDelGrupo) {
+          throw new ForbiddenException(
+            'No tienes permisos para actualizar este registro.',
+          );
+        }
+      }
+
+      await queryRunner.manager.update(
+        Registros,
+        { id: idRegistro },
+        { estatus: dto.estatus },
+      );
+
+      const visita = await queryRunner.manager.findOne(CapturistaVisita, {
+        where: { idRegistro },
+        order: { fechaHora: 'DESC', id: 'DESC' },
+      });
+      const fechaHora = new Date();
+
+      if (visita) {
+        await queryRunner.manager.update(
+          CapturistaVisita,
+          { id: visita.id },
+          {
+            idSupervisor: Number(idUsuario),
+            fechaHora,
+          },
+        );
+      } else {
+        await queryRunner.manager.insert(CapturistaVisita, {
+          idRegistro,
+          idCapturista: null,
+          idSupervisor: Number(idUsuario),
+          idGrupo: null,
+          fechaHora,
+        });
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        message: 'Estatus actualizado correctamente.',
+        data: {
+          idRegistro,
+          estatus: dto.estatus,
+          descripcionEstatus: REGISTRO_ESTATUS_DESCRIPCIONES[dto.estatus],
+          idSupervisor: Number(idUsuario),
+        },
+      };
+    } catch (error) {
+      if (transactionStarted) {
+        await queryRunner.rollbackTransaction();
+      }
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        'Error al actualizar el estatus del registro',
+      );
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Lista paginada de Registros + Licencias + capturista/supervisor (plano)
+   * con visibilidad según rol: 4/3 = todos; 2 = por IdGrupo; 1 = por IdCapturista.
+   * CapturistaVisita se usa como filtro (INNER JOIN) en roles 1/2 y se carga
+   * por lote (visita más reciente) para enriquecer la respuesta.
    * Licencias se carga por lote (sin alterar el conteo de paginación).
    */
   async findAllPaginated(
@@ -160,15 +387,22 @@ export class RegistrosService {
         .take(limit);
 
       const [registros, total] = await queryBuilder.getManyAndCount();
-      const licenciasByRegistroId = await this.loadLicenciasByRegistroIds(
-        registros.map((registro) => Number(registro.id)),
-      );
+      const idsRegistro = registros.map((registro) => Number(registro.id));
+      const [licenciasByRegistroId, visitasByRegistroId, fotosByRegistroId] =
+        await Promise.all([
+          this.loadLicenciasByRegistroIds(idsRegistro),
+          this.loadCapturistaVisitaFieldsByRegistroIds(idsRegistro),
+          this.loadFotosListadoByRegistroIds(idsRegistro),
+        ]);
 
       return {
         data: registros.map((registro) =>
           this.mapRegistroListItem(
             registro,
             licenciasByRegistroId.get(Number(registro.id)) ?? null,
+            visitasByRegistroId.get(Number(registro.id)) ??
+              this.buildNullCapturistaVisitaFields(),
+            fotosByRegistroId.get(Number(registro.id)) ?? [],
           ),
         ),
         paginated: {
@@ -218,14 +452,21 @@ export class RegistrosService {
         .addOrderBy('registro.id', 'DESC');
 
       const registros = await queryBuilder.getMany();
-      const licenciasByRegistroId = await this.loadLicenciasByRegistroIds(
-        registros.map((registro) => Number(registro.id)),
-      );
+      const idsRegistro = registros.map((registro) => Number(registro.id));
+      const [licenciasByRegistroId, visitasByRegistroId, fotosByRegistroId] =
+        await Promise.all([
+          this.loadLicenciasByRegistroIds(idsRegistro),
+          this.loadCapturistaVisitaFieldsByRegistroIds(idsRegistro),
+          this.loadFotosListadoByRegistroIds(idsRegistro),
+        ]);
 
       return registros.map((registro) =>
         this.mapRegistroListItem(
           registro,
           licenciasByRegistroId.get(Number(registro.id)) ?? null,
+          visitasByRegistroId.get(Number(registro.id)) ??
+            this.buildNullCapturistaVisitaFields(),
+          fotosByRegistroId.get(Number(registro.id)) ?? [],
         ),
       );
     } catch (error) {
@@ -363,9 +604,276 @@ export class RegistrosService {
     return map;
   }
 
+  /**
+   * Carga la visita más reciente por registro y resuelve nombres de Usuarios.
+   * Orden: FechaHora DESC, Id DESC. Sin N+1.
+   */
+  private async loadCapturistaVisitaFieldsByRegistroIds(
+    idsRegistro: number[],
+  ): Promise<Map<number, CapturistaVisitaFlatFields>> {
+    const result = new Map<number, CapturistaVisitaFlatFields>();
+    if (idsRegistro.length === 0) {
+      return result;
+    }
+
+    const visitas = await this.dataSource
+      .getRepository(CapturistaVisita)
+      .createQueryBuilder('capturistaVisita')
+      .where('capturistaVisita.idRegistro IN (:...idsRegistro)', {
+        idsRegistro,
+      })
+      .orderBy('capturistaVisita.fechaHora', 'DESC')
+      .addOrderBy('capturistaVisita.id', 'DESC')
+      .getMany();
+
+    const visitaByRegistroId = new Map<number, CapturistaVisita>();
+    for (const visita of visitas) {
+      if (visita.idRegistro == null) {
+        continue;
+      }
+      const idRegistro = Number(visita.idRegistro);
+      if (!visitaByRegistroId.has(idRegistro)) {
+        visitaByRegistroId.set(idRegistro, visita);
+      }
+    }
+
+    const idsUsuario = new Set<number>();
+    for (const visita of visitaByRegistroId.values()) {
+      if (visita.idCapturista != null) {
+        idsUsuario.add(Number(visita.idCapturista));
+      }
+      if (visita.idSupervisor != null) {
+        idsUsuario.add(Number(visita.idSupervisor));
+      }
+    }
+
+    const usuariosById = await this.loadUsuariosNombreByIds([...idsUsuario]);
+
+    const idsGrupo = new Set<number>();
+    for (const usuario of usuariosById.values()) {
+      if (usuario.idGrupo != null) {
+        idsGrupo.add(Number(usuario.idGrupo));
+      }
+    }
+    const gruposById = await this.loadGruposNombreByIds([...idsGrupo]);
+
+    for (const [idRegistro, visita] of visitaByRegistroId) {
+      result.set(
+        idRegistro,
+        this.mapCapturistaVisitaFields(visita, usuariosById, gruposById),
+      );
+    }
+
+    return result;
+  }
+
+  private async loadUsuariosNombreByIds(
+    idsUsuario: number[],
+  ): Promise<Map<number, UsuarioNombre>> {
+    const map = new Map<number, UsuarioNombre>();
+    if (idsUsuario.length === 0) {
+      return map;
+    }
+
+    const usuarios = await this.dataSource.getRepository(Usuarios).find({
+      where: { id: In(idsUsuario) },
+      select: ['id', 'nombre', 'apellidoPaterno', 'apellidoMaterno', 'idGrupo'],
+    });
+
+    for (const usuario of usuarios) {
+      map.set(Number(usuario.id), usuario);
+    }
+
+    return map;
+  }
+
+  private async loadGruposNombreByIds(
+    idsGrupo: number[],
+  ): Promise<Map<number, GrupoNombre>> {
+    const map = new Map<number, GrupoNombre>();
+    if (idsGrupo.length === 0) {
+      return map;
+    }
+
+    const grupos = await this.dataSource.getRepository(Grupos).find({
+      where: { id: In(idsGrupo) },
+      select: ['id', 'nombre'],
+    });
+
+    for (const grupo of grupos) {
+      map.set(Number(grupo.id), grupo);
+    }
+
+    return map;
+  }
+
+  /**
+   * Fotos tipos 6/7/8 por lote. Orden: IdTipoFoto, FechaHora, Id ASC.
+   */
+  private async loadFotosListadoByRegistroIds(
+    idsRegistro: number[],
+  ): Promise<Map<number, RegistroFotoResponseDto[]>> {
+    const map = new Map<number, RegistroFotoResponseDto[]>();
+    if (idsRegistro.length === 0) {
+      return map;
+    }
+
+    const fotos = await this.dataSource
+      .getRepository(Fotos)
+      .createQueryBuilder('foto')
+      .select([
+        'foto.id',
+        'foto.idRegistro',
+        'foto.ruta',
+        'foto.fechaHora',
+        'foto.idTipoFoto',
+      ])
+      .where('foto.idRegistro IN (:...idsRegistro)', { idsRegistro })
+      .andWhere('foto.idTipoFoto IN (:...tiposFoto)', {
+        tiposFoto: [...FOTOS_TIPOS_LISTADO],
+      })
+      .orderBy('foto.idTipoFoto', 'ASC')
+      .addOrderBy('foto.fechaHora', 'ASC')
+      .addOrderBy('foto.id', 'ASC')
+      .getMany();
+
+    for (const foto of fotos) {
+      if (foto.idRegistro == null || foto.idTipoFoto == null) {
+        continue;
+      }
+      const idRegistro = Number(foto.idRegistro);
+      const idFoto = Number(foto.id);
+      const listado = map.get(idRegistro) ?? [];
+      if (listado.some((item) => item.id === idFoto)) {
+        continue;
+      }
+      listado.push({
+        id: idFoto,
+        idRegistro,
+        ruta: foto.ruta ?? null,
+        fechaHora: foto.fechaHora ?? null,
+        idTipoFoto: Number(foto.idTipoFoto),
+      });
+      map.set(idRegistro, listado);
+    }
+
+    return map;
+  }
+
+  private mapCapturistaVisitaFields(
+    visita: CapturistaVisita,
+    usuariosById: Map<number, UsuarioNombre>,
+    gruposById: Map<number, GrupoNombre>,
+  ): CapturistaVisitaFlatFields {
+    const idCapturista =
+      visita.idCapturista != null ? Number(visita.idCapturista) : null;
+    const idSupervisor =
+      visita.idSupervisor != null ? Number(visita.idSupervisor) : null;
+
+    const capturista =
+      idCapturista != null ? (usuariosById.get(idCapturista) ?? null) : null;
+    const supervisor =
+      idSupervisor != null ? (usuariosById.get(idSupervisor) ?? null) : null;
+
+    const nombreCapturista = capturista?.nombre ?? null;
+    const apellidoPaternoCapturista = capturista?.apellidoPaterno ?? null;
+    const apellidoMaternoCapturista = capturista?.apellidoMaterno ?? null;
+
+    const nombreSupervisor = supervisor?.nombre ?? null;
+    const apellidoPaternoSupervisor = supervisor?.apellidoPaterno ?? null;
+    const apellidoMaternoSupervisor = supervisor?.apellidoMaterno ?? null;
+
+    const idGrupoCapturista =
+      capturista?.idGrupo != null ? Number(capturista.idGrupo) : null;
+    const idGrupoSupervisor =
+      supervisor?.idGrupo != null ? Number(supervisor.idGrupo) : null;
+
+    const grupoCapturista =
+      idGrupoCapturista != null
+        ? (gruposById.get(idGrupoCapturista) ?? null)
+        : null;
+    const grupoSupervisor =
+      idGrupoSupervisor != null
+        ? (gruposById.get(idGrupoSupervisor) ?? null)
+        : null;
+
+    return {
+      idCapturistaVisita: Number(visita.id),
+      idRegistroCapturistaVisita:
+        visita.idRegistro != null ? Number(visita.idRegistro) : null,
+      idCapturista,
+      nombreCapturista,
+      apellidoPaternoCapturista,
+      apellidoMaternoCapturista,
+      nombreCompletoCapturista: this.buildFullName(
+        nombreCapturista,
+        apellidoPaternoCapturista,
+        apellidoMaternoCapturista,
+      ),
+      idGrupoCapturista,
+      nombreGrupoCapturista: grupoCapturista?.nombre ?? null,
+      idSupervisor,
+      nombreSupervisor,
+      apellidoPaternoSupervisor,
+      apellidoMaternoSupervisor,
+      nombreCompletoSupervisor: this.buildFullName(
+        nombreSupervisor,
+        apellidoPaternoSupervisor,
+        apellidoMaternoSupervisor,
+      ),
+      idGrupoSupervisor,
+      nombreGrupoSupervisor: grupoSupervisor?.nombre ?? null,
+      idGrupoCapturistaVisita:
+        visita.idGrupo != null ? Number(visita.idGrupo) : null,
+      fechaHoraCapturistaVisita: visita.fechaHora ?? null,
+    };
+  }
+
+  private buildNullCapturistaVisitaFields(): CapturistaVisitaFlatFields {
+    return {
+      idCapturistaVisita: null,
+      idRegistroCapturistaVisita: null,
+      idCapturista: null,
+      nombreCapturista: null,
+      apellidoPaternoCapturista: null,
+      apellidoMaternoCapturista: null,
+      nombreCompletoCapturista: null,
+      idGrupoCapturista: null,
+      nombreGrupoCapturista: null,
+      idSupervisor: null,
+      nombreSupervisor: null,
+      apellidoPaternoSupervisor: null,
+      apellidoMaternoSupervisor: null,
+      nombreCompletoSupervisor: null,
+      idGrupoSupervisor: null,
+      nombreGrupoSupervisor: null,
+      idGrupoCapturistaVisita: null,
+      fechaHoraCapturistaVisita: null,
+    };
+  }
+
+  private buildFullName(
+    nombre?: string | null,
+    apellidoPaterno?: string | null,
+    apellidoMaterno?: string | null,
+  ): string | null {
+    const partes = [nombre, apellidoPaterno, apellidoMaterno]
+      .filter(
+        (valor) =>
+          valor !== null &&
+          valor !== undefined &&
+          String(valor).trim() !== '',
+      )
+      .map((valor) => String(valor).trim());
+
+    return partes.length > 0 ? partes.join(' ') : null;
+  }
+
   private mapRegistroListItem(
     registro: Registros,
     licencia: Licencias | null,
+    visitaFields: CapturistaVisitaFlatFields,
+    fotos: RegistroFotoResponseDto[],
   ): RegistroListadoItemDto {
     return {
       id: Number(registro.id),
@@ -407,6 +915,29 @@ export class RegistrosService {
       fechaHoraLicencia: licencia?.fechaHora ?? null,
       fechaCreacionLicencia: licencia?.fechaCreacion ?? null,
       fechaActualizacionLicencia: licencia?.fechaActualizacion ?? null,
+
+      idCapturistaVisita: visitaFields.idCapturistaVisita,
+      idRegistroCapturistaVisita: visitaFields.idRegistroCapturistaVisita,
+      idGrupoCapturistaVisita: visitaFields.idGrupoCapturistaVisita,
+      fechaHoraCapturistaVisita: visitaFields.fechaHoraCapturistaVisita,
+
+      idCapturista: visitaFields.idCapturista,
+      nombreCapturista: visitaFields.nombreCapturista,
+      apellidoPaternoCapturista: visitaFields.apellidoPaternoCapturista,
+      apellidoMaternoCapturista: visitaFields.apellidoMaternoCapturista,
+      nombreCompletoCapturista: visitaFields.nombreCompletoCapturista,
+      idGrupoCapturista: visitaFields.idGrupoCapturista,
+      nombreGrupoCapturista: visitaFields.nombreGrupoCapturista,
+
+      idSupervisor: visitaFields.idSupervisor,
+      nombreSupervisor: visitaFields.nombreSupervisor,
+      apellidoPaternoSupervisor: visitaFields.apellidoPaternoSupervisor,
+      apellidoMaternoSupervisor: visitaFields.apellidoMaternoSupervisor,
+      nombreCompletoSupervisor: visitaFields.nombreCompletoSupervisor,
+      idGrupoSupervisor: visitaFields.idGrupoSupervisor,
+      nombreGrupoSupervisor: visitaFields.nombreGrupoSupervisor,
+
+      fotos,
     };
   }
 

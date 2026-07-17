@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
- * Campos planos de CapturistaVisita + nombres de Usuarios
+ * Campos planos de CapturistaVisita + Usuarios + Grupos
  * para GET /monitoreo/:idRegistro (camelCase, nullable).
  */
 export class MonitoreoCapturistaVisitaFieldsDto {
@@ -26,6 +26,12 @@ export class MonitoreoCapturistaVisitaFieldsDto {
   @ApiPropertyOptional({ nullable: true, example: 'Juan Pérez López' })
   nombreCompletoCapturista: string | null;
 
+  @ApiPropertyOptional({ nullable: true, example: 2 })
+  idGrupoCapturista: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Grupo Norte' })
+  nombreGrupoCapturista: string | null;
+
   @ApiPropertyOptional({ nullable: true, example: 8 })
   idSupervisor: number | null;
 
@@ -40,6 +46,12 @@ export class MonitoreoCapturistaVisitaFieldsDto {
 
   @ApiPropertyOptional({ nullable: true, example: 'María Torres García' })
   nombreCompletoSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 3 })
+  idGrupoSupervisor: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Supervisores Centro' })
+  nombreGrupoSupervisor: string | null;
 
   @ApiPropertyOptional({ nullable: true, example: 2 })
   idGrupoCapturistaVisita: number | null;

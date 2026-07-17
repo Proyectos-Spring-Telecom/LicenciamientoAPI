@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RegistroFotoResponseDto } from 'src/common/dto/registro-foto-response.dto';
 
 /**
  * Ítem plano del listado GET /monitoreo.
- * Atributos de Registros + Licencias en el mismo nivel (camelCase).
+ * Atributos de Registros + Licencias + CapturistaVisita/Usuarios/Grupos
+ * + fotos (tipos 6, 7, 8) en el mismo nivel (camelCase).
  */
 export class MonitoreoListadoItemDto {
   @ApiProperty({ example: 4 })
@@ -162,6 +164,12 @@ export class MonitoreoListadoItemDto {
   @ApiPropertyOptional({ nullable: true, example: 'Juan Pérez López' })
   nombreCompletoCapturista: string | null;
 
+  @ApiPropertyOptional({ nullable: true, example: 2 })
+  idGrupoCapturista: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Grupo Norte' })
+  nombreGrupoCapturista: string | null;
+
   @ApiPropertyOptional({ nullable: true, example: 8 })
   idSupervisor: number | null;
 
@@ -176,4 +184,16 @@ export class MonitoreoListadoItemDto {
 
   @ApiPropertyOptional({ nullable: true, example: 'María Torres García' })
   nombreCompletoSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 3 })
+  idGrupoSupervisor: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Supervisores Centro' })
+  nombreGrupoSupervisor: string | null;
+
+  @ApiProperty({
+    type: [RegistroFotoResponseDto],
+    description: 'Fotografías del registro con IdTipoFoto 6, 7 u 8.',
+  })
+  fotos: RegistroFotoResponseDto[];
 }

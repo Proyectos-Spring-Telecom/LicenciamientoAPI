@@ -43,9 +43,9 @@ El servicio no utiliza paginación ni filtros de fecha.
 - Rol 1: registros capturados por el usuario.
 
 Cada elemento es un objeto plano en camelCase: atributos de Registros,
-Licencias y CapturistaVisita/Usuarios (capturista y supervisor) en el mismo nivel.
-Si no hay fila relacionada, esos atributos se devuelven como null.
-
+Licencias, CapturistaVisita/Usuarios/Grupos (capturista, supervisor y sus grupos)
+y la colección \`fotos\` (tipos 6, 7 y 8). Si no hay fila relacionada, esos
+atributos se devuelven como null; \`fotos\` siempre es un arreglo.
 Orden: FechaCreacion DESC, Id DESC.
 No recibe parámetros de consulta.
 `,
@@ -75,10 +75,10 @@ No recibe parámetros de consulta.
 Devuelve un único registro visible para el usuario autenticado y todos sus datos relacionados.
 Los campos del registro principal están en camelCase.
 
-Incluye campos planos de CapturistaVisita y nombres de capturista/supervisor
-(Usuarios), también en camelCase y en el mismo nivel (sin objetos anidados):
-idCapturista, nombreCompletoCapturista, idSupervisor, nombreCompletoSupervisor, etc.
-Si no hay visita o faltan usuarios, esos atributos se devuelven como null.
+Incluye campos planos de CapturistaVisita, nombres de capturista/supervisor
+(Usuarios), grupos (\`idGrupoCapturista\`, \`nombreGrupoCapturista\`, etc.)
+y la colección \`fotos\` (IdTipoFoto 6, 7 u 8; arreglo vacío si no hay).
+Si no hay visita o faltan usuarios/grupos, esos atributos se devuelven como null.
 
 Aplica la misma visualización por rol del listado:
 Rol 4/3: todos; Rol 2: grupo; Rol 1: capturista.
@@ -93,7 +93,7 @@ Rol 4/3: todos; Rol 2: grupo; Rol 1: capturista.
   @ApiResponse({
     status: 200,
     description:
-      'Detalle del registro (camelCase) con capturista/supervisor planos y relaciones según PredioObra',
+      'Detalle del registro (camelCase) con capturista/supervisor/grupos, fotos 6/7/8 y relaciones según PredioObra',
   })
   @ApiResponse({
     status: 400,

@@ -4,6 +4,9 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
+  ParseIntPipe,
+  Patch,
   Post,
   Query,
   Request,
@@ -19,6 +22,7 @@ import {
   ApiConsumes,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -35,7 +39,9 @@ import {
 } from './licencia-construccion.constants';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
+import { RegistroDetalleResponseDto } from './dto/registro-detalle-response.dto';
 import { RegistroListadoItemDto } from './dto/registro-listado-item.dto';
+import { UpdateRegistroEstatusDto } from './dto/update-registro-estatus.dto';
 import { RegistrosService } from './registros.service';
 import { SAPAC_FILE_FIELD_NAMES } from './sapac.constants';
 import { CATASTRO_FILE_FIELD_NAMES } from './catastro.constants';
@@ -76,21 +82,67 @@ const multiBinaryFiles = {
 @Roles()
 @Controller('registros')
 export class RegistrosController {
-  constructor(private readonly registrosService: RegistrosService) {}
+  constructor(private readonly registrosService: RegistrosService) { }
+
+  @Patch(':idRegistro/estatus')
+  @Roles()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Actualizar el estatus de un registro',
+    description: `
+Actualiza exclusivamente \`Registros.Estatus\` y registra al usuario del JWT
+como \`CapturistaVisita.IdSupervisor\`, dentro de una misma transacción.
+
+Estados permitidos:
+- 1 = Información Faltante
+- 2 = Rechazo o Sin respuesta
+- 3 = Datos Correctos
+- 4 = Revisión
+- 5 = Baja
+
+Roles 3 y 4 pueden actualizar cualquier registro.
+Rol 2 únicamente puede actualizar registros de su grupo.
+`,
+  })
+  @ApiBody({ type: UpdateRegistroEstatusDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Estatus actualizado correctamente',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Identificador o estatus inválido',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 403,
+    description: 'Rol no autorizado o registro fuera del grupo del usuario',
+  })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  updateEstatus(
+    @Param('idRegistro', ParseIntPipe) idRegistro: number,
+    @Body() dto: UpdateRegistroEstatusDto,
+    @Request() req: { user: AuthenticatedUser },
+  ) {
+    return this.registrosService.updateEstatus(idRegistro, dto, req.user);
+  }
 
   @Get()
   @ApiOperation({
     summary: 'Listar registros paginados',
     description: `
-Consulta columnas de la tabla \`Registros\` más atributos planos de \`Licencias\`
-(mismo nivel, camelCase). La visibilidad depende del rol del JWT:
+Consulta columnas de la tabla \`Registros\` más atributos planos de \`Licencias\`,
+capturista/supervisor vía \`CapturistaVisita\` → \`Usuarios\` → \`Grupos\`,
+y la colección \`fotos\` (IdTipoFoto 6, 7 u 8).
+La visibilidad depende del rol del JWT:
 
 - Rol 4: todos los registros.
 - Rol 3: todos los registros.
 - Rol 2: registros de su grupo (\`CapturistaVisita.IdGrupo\`).
 - Rol 1: registros capturados por el usuario (\`CapturistaVisita.IdCapturista\`).
 
-Si no hay fila de Licencias, sus atributos se devuelven como null.
+Si no hay fila de Licencias o CapturistaVisita, sus atributos se devuelven como null.
+\`fotos\` siempre es un arreglo (vacío si no hay fotografías de esos tipos).
 Parámetros opcionales: \`page\` (default 1) y \`limit\` (default 10, máximo 100).
 Orden: FechaCreacion DESC, Id DESC.
 No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
@@ -113,7 +165,7 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
   @ApiResponse({
     status: 200,
     description:
-      'Lista paginada (data + paginated). Cada ítem incluye atributos planos de Licencias (nullable).',
+      'Lista paginada (data + paginated). Cada ítem incluye Licencias, capturista/supervisor/grupos y fotos 6/7/8 (nullable / arreglo).',
   })
   @ApiResponse({ status: 400, description: 'Parámetros de paginación inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
@@ -129,13 +181,62 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
     return this.registrosService.findAllPaginated(query, req.user);
   }
 
+  @Get(':idRegistro')
+  @ApiOperation({
+    summary: 'Obtener el detalle completo de un registro',
+    description: `
+Devuelve un único registro visible para el usuario autenticado y todos sus datos relacionados
+(mismo contrato que \`GET /monitoreo/:idRegistro\`).
+
+Los campos del registro principal, CapturistaVisita, capturista/supervisor/grupos y
+\`fotos\` (tipos 6, 7 y 8) están en camelCase en el mismo nivel dentro de \`data\`.
+Según \`PredioObra\` se agregan las relaciones anidadas (Sapac/Catastro/Licencias/ProteccionCivil
+o LicenciaConstruccion).
+
+Visibilidad por rol (JWT):
+- Rol 4/3: cualquier registro.
+- Rol 2: registros de su grupo.
+- Rol 1: registros donde figura como capturista.
+`,
+  })
+  @ApiParam({
+    name: 'idRegistro',
+    required: true,
+    example: 25,
+    description: 'Identificador del registro',
+  })
+  @ApiOkResponse({
+    description:
+      'Detalle del registro envuelto en `{ data }` (mismo contrato que Monitoreo).',
+    type: RegistroDetalleResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Identificador de registro inválido',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Rol no autorizado, supervisor sin grupo, o registro fuera de alcance',
+  })
+  @ApiResponse({ status: 404, description: 'Registro no encontrado' })
+  findOne(
+    @Param('idRegistro', ParseIntPipe) idRegistro: number,
+    @Request() req: { user: AuthenticatedUser },
+  ): Promise<{ data: Record<string, unknown> }> {
+    return this.registrosService.findOne(idRegistro, req.user);
+  }
+
   @Post('por-rango-fechas')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Obtiene registros por rango de fechas',
     description: `
 Obtiene los registros creados dentro del rango solicitado (\`Registros.FechaCreacion\`)
-con atributos planos de \`Licencias\` en el mismo nivel (camelCase).
+con atributos planos de \`Licencias\`, capturista/supervisor/grupos
+(\`CapturistaVisita\` → \`Usuarios\` → \`Grupos\`) y \`fotos\` (tipos 6, 7, 8)
+en el mismo nivel (camelCase).
 El body solo acepta \`fechaInicio\` y \`fechaFin\` (YYYY-MM-DD).
 La visibilidad depende del rol contenido en el JWT:
 
@@ -153,7 +254,7 @@ No se aceptan idRol, idGrupo ni idUsuario en el body.
   @ApiBody({ type: GetRegistrosByDateRangeDto })
   @ApiOkResponse({
     description:
-      'Arreglo plano de Registros + Licencias dentro del rango (sin wrapper data).',
+      'Arreglo plano de Registros + Licencias + capturista/supervisor/grupos + fotos (sin wrapper data).',
     type: RegistroListadoItemDto,
     isArray: true,
   })
