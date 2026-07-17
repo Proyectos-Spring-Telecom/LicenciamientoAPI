@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiResponse,
@@ -34,6 +35,7 @@ import {
 } from './licencia-construccion.constants';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
+import { RegistroListadoItemDto } from './dto/registro-listado-item.dto';
 import { RegistrosService } from './registros.service';
 import { SAPAC_FILE_FIELD_NAMES } from './sapac.constants';
 import { CATASTRO_FILE_FIELD_NAMES } from './catastro.constants';
@@ -80,13 +82,15 @@ export class RegistrosController {
   @ApiOperation({
     summary: 'Listar registros paginados',
     description: `
-Consulta columnas de la tabla \`Registros\`. La visibilidad depende del rol del JWT:
+Consulta columnas de la tabla \`Registros\` más atributos planos de \`Licencias\`
+(mismo nivel, camelCase). La visibilidad depende del rol del JWT:
 
 - Rol 4: todos los registros.
 - Rol 3: todos los registros.
 - Rol 2: registros de su grupo (\`CapturistaVisita.IdGrupo\`).
 - Rol 1: registros capturados por el usuario (\`CapturistaVisita.IdCapturista\`).
 
+Si no hay fila de Licencias, sus atributos se devuelven como null.
 Parámetros opcionales: \`page\` (default 1) y \`limit\` (default 10, máximo 100).
 Orden: FechaCreacion DESC, Id DESC.
 No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
@@ -109,7 +113,7 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
   @ApiResponse({
     status: 200,
     description:
-      'Lista paginada de Registros (solo columnas de la tabla Registros)',
+      'Lista paginada (data + paginated). Cada ítem incluye atributos planos de Licencias (nullable).',
   })
   @ApiResponse({ status: 400, description: 'Parámetros de paginación inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
@@ -130,7 +134,8 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
   @ApiOperation({
     summary: 'Obtiene registros por rango de fechas',
     description: `
-Obtiene los registros creados dentro del rango solicitado (\`Registros.FechaCreacion\`).
+Obtiene los registros creados dentro del rango solicitado (\`Registros.FechaCreacion\`)
+con atributos planos de \`Licencias\` en el mismo nivel (camelCase).
 El body solo acepta \`fechaInicio\` y \`fechaFin\` (YYYY-MM-DD).
 La visibilidad depende del rol contenido en el JWT:
 
@@ -141,13 +146,16 @@ La visibilidad depende del rol contenido en el JWT:
 
 Rango inclusivo: desde fechaInicio 00:00:00 hasta el final de fechaFin
 (límite superior exclusivo = día siguiente 00:00:00).
+Respuesta: arreglo JSON directo (sin propiedad data).
 No se aceptan idRol, idGrupo ni idUsuario en el body.
 `,
   })
   @ApiBody({ type: GetRegistrosByDateRangeDto })
-  @ApiResponse({
-    status: 200,
-    description: 'Listado de Registros dentro del rango (solo columnas de Registros)',
+  @ApiOkResponse({
+    description:
+      'Arreglo plano de Registros + Licencias dentro del rango (sin wrapper data).',
+    type: RegistroListadoItemDto,
+    isArray: true,
   })
   @ApiResponse({
     status: 400,
@@ -162,7 +170,7 @@ No se aceptan idRol, idGrupo ni idUsuario en el body.
   findByDateRange(
     @Body() dto: GetRegistrosByDateRangeDto,
     @Request() req: { user: AuthenticatedUser },
-  ) {
+  ): Promise<RegistroListadoItemDto[]> {
     return this.registrosService.findByDateRange(dto, req.user);
   }
 

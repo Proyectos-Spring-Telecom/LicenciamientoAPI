@@ -43,6 +43,7 @@ import { CreateRegistroDto } from './dto/create-registro.dto';
 import { CreateSapacDto } from './dto/create-sapac.dto';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
+import { RegistroListadoItemDto } from './dto/registro-listado-item.dto';
 import {
   buildEndExclusiveDateLocal,
   buildStartDateLocal,
@@ -135,9 +136,10 @@ export class RegistrosService {
   ) { }
 
   /**
-   * Lista paginada de Registros con visibilidad según rol del JWT:
+   * Lista paginada de Registros + Licencias (plano) con visibilidad según rol:
    * 4/3 = todos; 2 = por IdGrupo; 1 = por IdCapturista.
    * CapturistaVisita solo se usa como filtro (INNER JOIN), no se devuelve.
+   * Licencias se carga por lote (sin alterar el conteo de paginación).
    */
   async findAllPaginated(
     query: GetRegistrosQueryDto,
@@ -158,9 +160,17 @@ export class RegistrosService {
         .take(limit);
 
       const [registros, total] = await queryBuilder.getManyAndCount();
+      const licenciasByRegistroId = await this.loadLicenciasByRegistroIds(
+        registros.map((registro) => Number(registro.id)),
+      );
 
       return {
-        data: registros.map((registro) => this.mapRegistroListItem(registro)),
+        data: registros.map((registro) =>
+          this.mapRegistroListItem(
+            registro,
+            licenciasByRegistroId.get(Number(registro.id)) ?? null,
+          ),
+        ),
         paginated: {
           total,
           page,
@@ -181,15 +191,12 @@ export class RegistrosService {
    * Listado (sin paginación) filtrado por FechaCreacion inclusiva
    * [fechaInicio 00:00:00, día siguiente a fechaFin 00:00:00).
    * Misma visibilidad por rol que findAllPaginated.
+   * Respuesta: arreglo directo (sin wrapper data).
    */
   async findByDateRange(
     dto: GetRegistrosByDateRangeDto,
     user: AuthenticatedUser,
-  ): Promise<{
-    status: string;
-    message: string;
-    data: ReturnType<RegistrosService['mapRegistroListItem']>[];
-  }> {
+  ): Promise<RegistroListadoItemDto[]> {
     try {
       if (dto.fechaInicio > dto.fechaFin) {
         throw new BadRequestException(
@@ -211,12 +218,16 @@ export class RegistrosService {
         .addOrderBy('registro.id', 'DESC');
 
       const registros = await queryBuilder.getMany();
+      const licenciasByRegistroId = await this.loadLicenciasByRegistroIds(
+        registros.map((registro) => Number(registro.id)),
+      );
 
-      return {
-        status: 'success',
-        message: 'Registros obtenidos correctamente por rango de fechas.',
-        data: registros.map((registro) => this.mapRegistroListItem(registro)),
-      };
+      return registros.map((registro) =>
+        this.mapRegistroListItem(
+          registro,
+          licenciasByRegistroId.get(Number(registro.id)) ?? null,
+        ),
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -320,25 +331,82 @@ export class RegistrosService {
     }
   }
 
-  private mapRegistroListItem(registro: Registros) {
+  /**
+   * Carga Licencias de los registros visibles en una sola consulta.
+   * Si hay más de una fila por IdRegistro, conserva la de Id más alto.
+   */
+  private async loadLicenciasByRegistroIds(
+    idsRegistro: number[],
+  ): Promise<Map<number, Licencias>> {
+    const map = new Map<number, Licencias>();
+    if (idsRegistro.length === 0) {
+      return map;
+    }
+
+    const licencias = await this.dataSource
+      .getRepository(Licencias)
+      .createQueryBuilder('licencias')
+      .where('licencias.idRegistro IN (:...idsRegistro)', { idsRegistro })
+      .orderBy('licencias.id', 'DESC')
+      .getMany();
+
+    for (const licencia of licencias) {
+      if (licencia.idRegistro == null) {
+        continue;
+      }
+      const idRegistro = Number(licencia.idRegistro);
+      if (!map.has(idRegistro)) {
+        map.set(idRegistro, licencia);
+      }
+    }
+
+    return map;
+  }
+
+  private mapRegistroListItem(
+    registro: Registros,
+    licencia: Licencias | null,
+  ): RegistroListadoItemDto {
     return {
       id: Number(registro.id),
-      registro: registro.registro,
-      latitud: registro.latitud,
-      longitud: registro.longitud,
-      entidadFederativa: registro.entidadFederativa,
-      municipio: registro.municipio,
-      localidad: registro.localidad,
-      colonia: registro.colonia,
-      calle: registro.calle,
-      noInterior: registro.noInterior,
-      noExterior: registro.noExterior,
-      cp: registro.cp,
-      tipoRegistro: registro.tipoRegistro,
-      predioObra: registro.predioObra,
-      estatus: registro.estatus,
-      fechaCreacion: registro.fechaCreacion,
-      fechaActualizacion: registro.fechaActualizacion,
+      registro: registro.registro ?? null,
+      latitud: registro.latitud ?? null,
+      longitud: registro.longitud ?? null,
+      entidadFederativa: registro.entidadFederativa ?? null,
+      municipio: registro.municipio ?? null,
+      localidad: registro.localidad ?? null,
+      colonia: registro.colonia ?? null,
+      calle: registro.calle ?? null,
+      noInterior: registro.noInterior ?? null,
+      noExterior: registro.noExterior ?? null,
+      cp: registro.cp ?? null,
+      tipoRegistro: registro.tipoRegistro ?? null,
+      predioObra: registro.predioObra ?? null,
+      estatus: registro.estatus ?? null,
+      fechaCreacion: registro.fechaCreacion ?? null,
+      fechaActualizacion: registro.fechaActualizacion ?? null,
+
+      idLicencia: licencia != null ? Number(licencia.id) : null,
+      idRegistroLicencia:
+        licencia?.idRegistro != null ? Number(licencia.idRegistro) : null,
+      registroLicencia: licencia?.registro ?? null,
+      nombreComercial: licencia?.nombreComercial ?? null,
+      giro: licencia?.giro ?? null,
+      licenciaSuelo: licencia?.licenciaSuelo ?? null,
+      nombrePropietario: licencia?.nombrePropietario ?? null,
+      apellidoPaternoPropietario:
+        licencia?.apellidoPaternoPropietario ?? null,
+      apellidoMaternoPropietario:
+        licencia?.apellidoMaternoPropietario ?? null,
+      tipoPersona: licencia?.tipoPersona ?? null,
+      rfc: licencia?.rfc ?? null,
+      fechaExpedicion: licencia?.fechaExpedicion ?? null,
+      fechaRefrendo: licencia?.fechaRefrendo ?? null,
+      estacionamiento: licencia?.estacionamiento ?? null,
+      tipoLicencia: licencia?.tipo ?? null,
+      fechaHoraLicencia: licencia?.fechaHora ?? null,
+      fechaCreacionLicencia: licencia?.fechaCreacion ?? null,
+      fechaActualizacionLicencia: licencia?.fechaActualizacion ?? null,
     };
   }
 
