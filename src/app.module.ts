@@ -9,6 +9,7 @@ import { PermisosModule } from './permisos/permisos.module';
 import { RolesModule } from './roles/roles.module';
 import { MailModule } from './mail/mail.module';
 import { RegistrosModule } from './registros/registros.module';
+import { RegistrosActualizarModule } from './registros_actualizar/registros-actualizar.module';
 import { MonitoreoModule } from './monitoreo/monitoreo.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import Joi from 'joi';
@@ -78,6 +79,8 @@ import Joi from 'joi';
     ModulosModule,
 
     RegistrosModule,
+
+    RegistrosActualizarModule,
 
     MonitoreoModule,
 
