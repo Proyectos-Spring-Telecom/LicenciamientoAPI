@@ -184,12 +184,12 @@ export class AuthService {
 
     const permisosRows = user.idRol
       ? await this.usuariosRepository.query(
-          `SELECT rp.IdPermiso AS idPermiso
+        `SELECT rp.IdPermiso AS idPermiso
            FROM RolesPermisos rp
            INNER JOIN Permisos p ON p.Id = rp.IdPermiso
            WHERE rp.IdRol = ? AND p.Estatus = 1`,
-          [user.idRol],
-        )
+        [user.idRol],
+      )
       : [];
 
     const permisos = permisosRows.map((row: { idPermiso: number }) =>
@@ -319,6 +319,8 @@ Muchas gracias por su preferencia.`;
       if (!emailDestino) {
         throw new BadRequestException('El usuario no tiene correo registrado.');
       }
+      console.log('emailDestino', emailDestino);
+
       await this.emailService.sendResetPasswordEmail(
         emailDestino,
         name,
@@ -331,7 +333,7 @@ Muchas gracias por su preferencia.`;
         throw error;
       }
       throw new InternalServerErrorException({
-        message: 'Ocurrió un error al recuperar contraseña del usuario.',
+        message: 'Ocurrió un error al recuperar contraseña del usuario.' + error,
         error: error instanceof Error ? error.message : String(error),
       });
     }

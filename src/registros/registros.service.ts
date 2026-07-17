@@ -401,7 +401,7 @@ export class RegistrosService {
             registro,
             licenciasByRegistroId.get(Number(registro.id)) ?? null,
             visitasByRegistroId.get(Number(registro.id)) ??
-              this.buildNullCapturistaVisitaFields(),
+            this.buildNullCapturistaVisitaFields(),
             fotosByRegistroId.get(Number(registro.id)) ?? [],
           ),
         ),
@@ -465,7 +465,7 @@ export class RegistrosService {
           registro,
           licenciasByRegistroId.get(Number(registro.id)) ?? null,
           visitasByRegistroId.get(Number(registro.id)) ??
-            this.buildNullCapturistaVisitaFields(),
+          this.buildNullCapturistaVisitaFields(),
           fotosByRegistroId.get(Number(registro.id)) ?? [],
         ),
       );

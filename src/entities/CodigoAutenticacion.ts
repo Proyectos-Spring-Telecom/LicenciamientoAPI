@@ -1,42 +1,61 @@
-// src/usuarios/entities/codigo-autenticacion.entity.ts
-
 import {
-  Entity,
-  PrimaryGeneratedColumn,
   Column,
-  ManyToOne,
+  Entity,
+  Index,
   JoinColumn,
-  CreateDateColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
-import { Usuarios } from './Usuarios'; 
+import { Usuarios } from './Usuarios';
+import { applySchema } from 'src/common/apply-schema.decorator';
 
+@applySchema
+@Index('IDX_CodigoAutenticacion_IdUsuario', ['idUsuario'], {})
 @Entity('CodigoAutenticacion')
 export class CodigoAutenticacion {
-  @PrimaryGeneratedColumn({ name: 'Id', type: 'bigint' })
+  @PrimaryGeneratedColumn({ type: 'bigint', name: 'Id' })
   id: number;
 
-  @Column({ name: 'IdUsuario', type: 'bigint' })
+  @Column('bigint', { name: 'IdUsuario' })
   idUsuario: number;
 
-  @Column({ name: 'Codigo', type: 'varchar', length: 4 })
+  @Column('varchar', { name: 'Codigo', length: 6 })
   codigo: string;
 
-  @Column({ name: 'Tipo', type: 'tinyint', })
+  @Column('tinyint', { name: 'Tipo', unsigned: true })
   tipo: number;
 
-  @CreateDateColumn({ name: 'FechaCreacion', type: 'datetime', default: () => 'CURRENT_TIMESTAMP' })
+  @Column('datetime', {
+    name: 'FechaCreacion',
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   fechaCreacion: Date;
 
-  @Column({ name: 'FechaExpiracion', type: 'datetime' })
+  @Column('datetime', { name: 'FechaExpiracion' })
   fechaExpiracion: Date;
 
-  @Column({ name: 'Usado', type: 'tinyint', default: () => 0 })
+  @Column('tinyint', { name: 'Usado', default: () => "'0'" })
   usado: number;
 
-  @Column({ name: 'FechaUso', type: 'datetime', nullable: true })
+  @Column('datetime', { name: 'FechaUso', nullable: true })
   fechaUso: Date | null;
 
-  @Column({ name: 'Estatus', type: 'tinyint', default: () => 1 })
+  @Column('tinyint', { name: 'Estatus', default: () => "'1'" })
   estatus: number;
 
+  @Column('int', { name: 'IntentosFallidos', nullable: true, default: () => "'0'" })
+  intentosFallidos: number | null;
+
+  @ManyToOne(() => Usuarios, (usuario) => usuario.codigosAutenticacion, {
+    onDelete: 'CASCADE',
+    onUpdate: 'RESTRICT',
+  })
+  @JoinColumn([
+    {
+      name: 'IdUsuario',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'FK_CodigoAutenticacion_Usuarios',
+    },
+  ])
+  usuario: Usuarios;
 }
