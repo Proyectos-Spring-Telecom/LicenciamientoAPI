@@ -1,0 +1,952 @@
+import {
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { DataSource, EntityManager } from 'typeorm';
+import { Catastro } from 'src/entities/Catastro';
+import { Contactos } from 'src/entities/Contactos';
+import { Corresponsables } from 'src/entities/Corresponsables';
+import { FotosLicenciaConstruccion } from 'src/entities/FotosLicenciaConstruccion';
+import { LicenciaConstruccion } from 'src/entities/LicenciaConstruccion';
+import { Licencias } from 'src/entities/Licencias';
+import { ProteccionCivil } from 'src/entities/ProteccionCivil';
+import { Registros } from 'src/entities/Registros';
+import { Sapac } from 'src/entities/Sapac';
+import { TipoFoto } from 'src/entities/TipoFoto';
+import { Fotos } from 'src/entities/Fotos';
+import { FIRMA_FIELD_NAMES } from 'src/registros/licencia-construccion.constants';
+import { LicenciaConstruccionStorageService } from 'src/registros/licencia-construccion-storage.service';
+import { SAPAC_FILE_FIELD_NAMES } from 'src/registros/sapac.constants';
+import { SapacStorageService } from 'src/registros/sapac-storage.service';
+import { parseRegistroActualizarMultipart } from './registro-actualizar-form.parser';
+import {
+  assignUseful,
+  hasUsefulValues,
+  tieneValorActualizable,
+} from './registro-actualizar.util';
+import { RegistrosActualizarService } from './registros-actualizar.service';
+
+describe('registro-actualizar.util', () => {
+  it('tieneValorActualizable conserva 0 y rechaza vacíos', () => {
+    expect(tieneValorActualizable(0)).toBe(true);
+    expect(tieneValorActualizable('0')).toBe(true);
+    expect(tieneValorActualizable('')).toBe(false);
+    expect(tieneValorActualizable('   ')).toBe(false);
+    expect(tieneValorActualizable(null)).toBe(false);
+    expect(tieneValorActualizable(undefined)).toBe(false);
+  });
+
+  it('assignUseful no sobrescribe con vacíos', () => {
+    const target = { nombre: 'Juan', medidor: 'ABC', cuenta: '123' };
+    assignUseful(target, {
+      nombre: 'Pedro',
+      medidor: '',
+      cuenta: null,
+      extra: undefined,
+    });
+    expect(target).toEqual({
+      nombre: 'Pedro',
+      medidor: 'ABC',
+      cuenta: '123',
+    });
+  });
+
+  it('hasUsefulValues detecta 0', () => {
+    expect(hasUsefulValues({ TienePrograma: 0 })).toBe(true);
+    expect(hasUsefulValues({ Nombre: '' })).toBe(false);
+  });
+});
+
+describe('parseRegistroActualizarMultipart', () => {
+  it('parsea Sapac cuando PredioObra efectivo es 0', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Sapac.NumeroCuenta': '123',
+        'Sapac.IdTipoServicio': '1',
+      },
+      0,
+    );
+    expect(parsed.hasSapac).toBe(true);
+    expect(parsed.sapac?.NumeroCuenta).toBe('123');
+    expect(parsed.sapac?.IdTipoServicio).toBe(1);
+  });
+
+  it('ignora Sapac cuando PredioObra efectivo es 1', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        Calle: 'X',
+        'Sapac.NumeroCuenta': '123',
+      },
+      1,
+    );
+    expect(parsed.hasSapac).toBe(false);
+    expect(parsed.sapac).toBeUndefined();
+    expect(parsed.hasRootUsefulFields).toBe(true);
+  });
+
+  it('ignora LicenciaConstruccion cuando PredioObra efectivo es 0', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        Calle: 'X',
+        'LicenciaConstruccion.DescripcionProyecto': 'Obra',
+      },
+      0,
+    );
+    expect(parsed.hasRootUsefulFields).toBe(true);
+    expect(parsed.hasLicenciaConstruccion).toBe(false);
+    expect(parsed.licenciaConstruccion).toBeUndefined();
+  });
+
+  it('parsea LicenciaConstruccion y Corresponsables cuando PredioObra es 1', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'LicenciaConstruccion.TipoSolicitudLicencia': '2',
+        'LicenciaConstruccion.SuperficieTerrenoM2': '0',
+        'LicenciaConstruccion.Corresponsables[0].Id': '5',
+        'LicenciaConstruccion.Corresponsables[0].NombreCompleto': 'Arq Uno',
+        'LicenciaConstruccion.Corresponsables[1].NombreCompleto': 'Arq Dos',
+      },
+      1,
+    );
+    expect(parsed.hasLicenciaConstruccion).toBe(true);
+    expect(parsed.hasCorresponsables).toBe(true);
+    expect(parsed.licenciaConstruccion?.TipoSolicitudLicencia).toBe(2);
+    expect(parsed.licenciaConstruccion?.SuperficieTerrenoM2).toBe(0);
+    expect(parsed.licenciaConstruccion?.Corresponsables).toHaveLength(2);
+    expect(parsed.licenciaConstruccion?.Corresponsables?.[0].Id).toBe(5);
+  });
+
+  it('rechaza TipoSolicitudLicencia inválido', async () => {
+    await expect(
+      parseRegistroActualizarMultipart(
+        {
+          idRegistro: '10',
+          'LicenciaConstruccion.TipoSolicitudLicencia': '5',
+        },
+        1,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('acepta Licencias.FechaHora (no está prohibido como en Sapac)', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.FechaHora': '2026-07-17T22:14:36.518Z',
+        'Licencias.NombreComercial': 'Tienda',
+      },
+      0,
+    );
+    expect(parsed.hasLicencias).toBe(true);
+    expect(parsed.licencias?.FechaHora).toBe('2026-07-17T22:14:36.518Z');
+  });
+
+  it('ignora Correo placeholder sin @ (sin registro) en ContactoRepresentante', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'ProteccionCivil.EsEmpresa': '1',
+        'ProteccionCivil.ContactoRepresentante.Nombre': 'sin registro',
+        'ProteccionCivil.ContactoRepresentante.Correo': 'sin registro',
+      },
+      0,
+    );
+    expect(parsed.hasContactoRepresentante).toBe(true);
+    expect(parsed.contactoRepresentante?.Nombre).toBe('sin registro');
+    expect(parsed.contactoRepresentante?.Correo).toBeUndefined();
+  });
+
+  it('rechaza Correo con @ inválido', async () => {
+    await expect(
+      parseRegistroActualizarMultipart(
+        {
+          idRegistro: '10',
+          'Licencias.Contacto.Correo': 'no-es-valido@',
+        },
+        0,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('conserva TienePrograma=0 y Estacionamiento=0', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.Estacionamiento': '0',
+        'ProteccionCivil.TienePrograma': '0',
+        'ProteccionCivil.EsEmpresa': '1',
+      },
+      0,
+    );
+    expect(parsed.licencias?.Estacionamiento).toBe(0);
+    expect(parsed.proteccionCivil?.TienePrograma).toBe(0);
+    expect(parsed.hasLicencias).toBe(true);
+    expect(parsed.hasProteccionCivil).toBe(true);
+  });
+});
+
+describe('RegistrosActualizarService.updateFromMultipart', () => {
+  function createService(options?: {
+    registro?: Registros | null;
+    sapac?: Sapac | null;
+    licenciaConstruccion?: LicenciaConstruccion | null;
+    corresponsables?: Corresponsables[];
+    failOnSave?: boolean;
+    tipoFotoIds?: number[];
+  }) {
+    const registro =
+      options?.registro === undefined
+        ? ({
+            id: 10,
+            calle: 'Anterior',
+            predioObra: 0,
+            tipoRegistro: 1,
+            estatus: 4,
+            municipio: 'Cuernavaca',
+          } as Registros)
+        : options.registro;
+
+    const sapac = options?.sapac === undefined ? null : options.sapac;
+    const lc =
+      options?.licenciaConstruccion === undefined
+        ? null
+        : options.licenciaConstruccion;
+    const corresponsablesList = options?.corresponsables ?? [];
+    const tipoFotoIds = options?.tipoFotoIds ?? [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 25, 26, 27, 28,
+    ];
+
+    const saved: unknown[] = [];
+    let nextId = 50;
+
+    const manager = {
+      findOne: jest.fn().mockImplementation((entity, opts?: { where?: Record<string, unknown> }) => {
+        if (entity === Registros) return Promise.resolve(registro);
+        if (entity === Sapac) return Promise.resolve(sapac);
+        if (entity === Catastro) return Promise.resolve(null);
+        if (entity === Licencias) return Promise.resolve(null);
+        if (entity === Contactos) return Promise.resolve(null);
+        if (entity === ProteccionCivil) return Promise.resolve(null);
+        if (entity === LicenciaConstruccion) return Promise.resolve(lc);
+        if (entity === Corresponsables) {
+          const id = opts?.where?.id;
+          const found = corresponsablesList.find((c) => Number(c.id) === Number(id));
+          return Promise.resolve(found ?? null);
+        }
+        return Promise.resolve(null);
+      }),
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockImplementation((_e, data) => ({ ...data })),
+      save: jest.fn().mockImplementation(async (entityOrData, maybe?) => {
+        if (options?.failOnSave) {
+          throw new Error('db fail');
+        }
+        const data = maybe ?? entityOrData;
+        const row = { id: (data as { id?: number }).id ?? nextId++, ...data };
+        saved.push(row);
+        return row;
+      }),
+      query: jest.fn().mockResolvedValue([{ Id: 1 }]),
+    } as unknown as EntityManager;
+
+    const dataSource = {
+      getRepository: jest.fn().mockImplementation((entity) => {
+        if (entity === TipoFoto) {
+          return {
+            find: jest.fn().mockResolvedValue(
+              tipoFotoIds.map((id) => ({ id })),
+            ),
+          };
+        }
+        return {
+          findOne: jest.fn().mockResolvedValue(registro),
+        };
+      }),
+      transaction: jest.fn().mockImplementation(async (cb) => cb(manager)),
+    } as unknown as DataSource;
+
+    const storageService = {
+      assertValidFirmaFiles: jest.fn(),
+      assertValidDocumentoFiles: jest.fn(),
+      saveFirmas: jest.fn().mockResolvedValue({
+        saved: [
+          {
+            key: 'FirmaPropietario',
+            idTipoFoto: 25,
+            fileName: 'uuid.png',
+            absolutePath: '/tmp/10/25/uuid.png',
+            publicUrl: 'https://cdn.example/registros/data/10/25/uuid.png',
+          },
+        ],
+        absoluteCreated: ['/tmp/10/25/uuid.png'],
+      }),
+      saveDocumentoArrays: jest.fn().mockResolvedValue({
+        saved: [
+          {
+            key: 'Factibilidad',
+            idTipoFoto: 15,
+            fileName: 'a.pdf',
+            absolutePath: '/tmp/10/15/a.pdf',
+            publicUrl: 'https://cdn.example/registros/data/10/15/a.pdf',
+          },
+        ],
+        absoluteCreated: ['/tmp/10/15/a.pdf'],
+      }),
+      cleanup: jest.fn().mockResolvedValue(undefined),
+    } as unknown as LicenciaConstruccionStorageService;
+
+    const sapacStorageService = {
+      assertValidPhotoInputs: jest.fn(),
+      saveRegistroPhotos: jest.fn().mockResolvedValue({
+        saved: [
+          {
+            key: SAPAC_FILE_FIELD_NAMES.reciboSapac,
+            idTipoFoto: 3,
+            fileName: 'nuevo.jpg',
+            absolutePath: '/tmp/10/3/nuevo.jpg',
+            publicUrl: 'https://cdn.example/registros/data/10/3/nuevo.jpg',
+          },
+        ],
+        absoluteCreated: ['/tmp/10/3/nuevo.jpg'],
+      }),
+      cleanup: jest.fn().mockResolvedValue(undefined),
+    } as unknown as SapacStorageService;
+
+    const service = new RegistrosActualizarService(
+      dataSource,
+      storageService,
+      sapacStorageService,
+    );
+    return {
+      service,
+      manager,
+      dataSource,
+      registro,
+      saved,
+      storageService,
+      sapacStorageService,
+      lc,
+    };
+  }
+
+  const fakePng = (field: string): Express.Multer.File =>
+    ({
+      fieldname: field,
+      originalname: 'x.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('png'),
+      size: 3,
+    }) as Express.Multer.File;
+
+  it('actualiza Calle y crea Sapac cuando PredioObra efectivo es 0', async () => {
+    const { service, manager, registro } = createService({ sapac: null });
+
+    const result = await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Avenida Universidad',
+      'Sapac.NumeroCuenta': '999',
+      'Sapac.IdTipoServicio': '1',
+    });
+
+    expect(registro!.calle).toBe('Avenida Universidad');
+    expect(registro!.estatus).toBe(4);
+    expect(manager.create).toHaveBeenCalledWith(
+      Sapac,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(result.status).toBe('success');
+    expect(result.message).toBe('Registro actualizado correctamente');
+  });
+
+  it('no procesa Sapac cuando PredioObra almacenado es 1', async () => {
+    const registro = {
+      id: 10,
+      calle: 'X',
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, manager } = createService({ registro });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Nueva',
+      'Sapac.NumeroCuenta': '999',
+    });
+
+    expect(registro.calle).toBe('Nueva');
+    expect(manager.create).not.toHaveBeenCalledWith(
+      Sapac,
+      expect.anything(),
+    );
+  });
+
+  it('usa PredioObra del body al cambiar 1→0 y crea Sapac', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+      calle: 'A',
+    } as Registros;
+    const { service, manager } = createService({ registro, sapac: null });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      PredioObra: '0',
+      'Sapac.NumeroCuenta': '12345',
+    });
+
+    expect(registro.predioObra).toBe(0);
+    expect(manager.create).toHaveBeenCalledWith(
+      Sapac,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+  });
+
+  it('no sobrescribe Sapac con valores vacíos', async () => {
+    const sapac = {
+      id: 5,
+      idRegistro: 10,
+      numeroCuenta: '123',
+      nombre: 'Juan',
+      medidor: 'ABC',
+    } as Sapac;
+    const { service } = createService({ sapac });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'Sapac.Nombre': 'Pedro',
+      'Sapac.NumeroCuenta': '',
+      'Sapac.Medidor': '   ',
+    });
+
+    expect(sapac.nombre).toBe('Pedro');
+    expect(sapac.numeroCuenta).toBe('123');
+    expect(sapac.medidor).toBe('ABC');
+  });
+
+  it('404 si no existe el registro', async () => {
+    const { service } = createService({ registro: null });
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '999',
+        Calle: 'X',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('400 sin campos útiles', async () => {
+    const { service } = createService();
+    await expect(
+      service.updateFromMultipart({ idRegistro: '10' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('400 con solo LC vacía', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service } = createService({ registro });
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        'LicenciaConstruccion.DescripcionProyecto': '',
+        'LicenciaConstruccion.NombrePropietario': '   ',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('actualiza TienePrograma=0', async () => {
+    const { service, manager } = createService();
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'ProteccionCivil.EsEmpresa': '1',
+      'ProteccionCivil.TienePrograma': '0',
+    });
+
+    expect(manager.create).toHaveBeenCalledWith(
+      ProteccionCivil,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('crea LicenciaConstruccion cuando PredioObra efectivo es 1', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, manager } = createService({
+      registro,
+      licenciaConstruccion: null,
+    });
+
+    const result = await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.TipoSolicitudLicencia': '2',
+      'LicenciaConstruccion.DescripcionProyecto': 'Construcción nueva',
+      'LicenciaConstruccion.SuperficieTerrenoM2': '0',
+    });
+
+    expect(manager.create).toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        predioObra: 1,
+        idLicenciaConstruccion: expect.any(Number),
+      }),
+    );
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('actualiza LicenciaConstruccion existente sin vacíos', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = {
+      id: 8,
+      idRegistro: 10,
+      descripcionProyecto: 'Anterior',
+      nombrePropietario: 'Juan',
+      superficieTerrenoM2: 100,
+    } as LicenciaConstruccion;
+    const { service } = createService({ registro, licenciaConstruccion: lc });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.DescripcionProyecto': 'Actualizado',
+      'LicenciaConstruccion.NombrePropietario': '',
+      'LicenciaConstruccion.SuperficieTerrenoM2': '0',
+    });
+
+    expect(lc.descripcionProyecto).toBe('Actualizado');
+    expect(lc.nombrePropietario).toBe('Juan');
+    expect(lc.superficieTerrenoM2).toBe(0);
+  });
+
+  it('cambio PredioObra 0→1 crea LC y no toca Sapac', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 4,
+    } as Registros;
+    const { service, manager } = createService({
+      registro,
+      licenciaConstruccion: null,
+      sapac: { id: 1, numeroCuenta: 'keep' } as Sapac,
+    });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      PredioObra: '1',
+      'LicenciaConstruccion.TipoSolicitudLicencia': '2',
+      'Sapac.NumeroCuenta': '999',
+    });
+
+    expect(registro.predioObra).toBe(1);
+    expect(manager.create).toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(manager.create).not.toHaveBeenCalledWith(Sapac, expect.anything());
+  });
+
+  it('actualiza corresponsable con Id de la misma LC', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = { id: 8, idRegistro: 10 } as LicenciaConstruccion;
+    const corr = {
+      id: 5,
+      idLicenciaConstruccion: 8,
+      nombreCompleto: 'Viejo',
+      cedulaProfesional: '111',
+    } as Corresponsables;
+    const { service } = createService({
+      registro,
+      licenciaConstruccion: lc,
+      corresponsables: [corr],
+    });
+
+    const result = await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.Corresponsables[0].Id': '5',
+      'LicenciaConstruccion.Corresponsables[0].NombreCompleto': 'Nuevo',
+      'LicenciaConstruccion.Corresponsables[0].CedulaProfesional': '',
+    });
+
+    expect(corr.nombreCompleto).toBe('Nuevo');
+    expect(corr.cedulaProfesional).toBe('111');
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        corresponsables: [
+          expect.objectContaining({ id: 5, nombreCompleto: 'Nuevo' }),
+        ],
+      }),
+    );
+  });
+
+  it('crea corresponsable sin Id', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = { id: 8, idRegistro: 10 } as LicenciaConstruccion;
+    const { service, manager } = createService({
+      registro,
+      licenciaConstruccion: lc,
+    });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.Corresponsables[0].NombreCompleto': 'Arq Nuevo',
+      'LicenciaConstruccion.Corresponsables[0].CedulaProfesional': '7654321',
+    });
+
+    expect(manager.create).toHaveBeenCalledWith(
+      Corresponsables,
+      expect.objectContaining({ idLicenciaConstruccion: 8 }),
+    );
+  });
+
+  it('404 corresponsable inexistente', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = { id: 8, idRegistro: 10 } as LicenciaConstruccion;
+    const { service } = createService({
+      registro,
+      licenciaConstruccion: lc,
+      corresponsables: [],
+    });
+
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        'LicenciaConstruccion.Corresponsables[0].Id': '9999',
+        'LicenciaConstruccion.Corresponsables[0].NombreCompleto': 'X',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('400 corresponsable de otra licencia', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = { id: 8, idRegistro: 10 } as LicenciaConstruccion;
+    const corr = {
+      id: 5,
+      idLicenciaConstruccion: 99,
+      nombreCompleto: 'Ajeno',
+    } as Corresponsables;
+    const { service } = createService({
+      registro,
+      licenciaConstruccion: lc,
+      corresponsables: [corr],
+    });
+
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        'LicenciaConstruccion.Corresponsables[0].Id': '5',
+        'LicenciaConstruccion.Corresponsables[0].NombreCompleto': 'Hack',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('no crea corresponsable vacío', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = { id: 8, idRegistro: 10 } as LicenciaConstruccion;
+    const { service, manager } = createService({
+      registro,
+      licenciaConstruccion: lc,
+    });
+
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        'LicenciaConstruccion.Corresponsables[0].NombreCompleto': '',
+        'LicenciaConstruccion.Corresponsables[0].CedulaProfesional': '   ',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(manager.create).not.toHaveBeenCalledWith(
+      Corresponsables,
+      expect.anything(),
+    );
+  });
+
+  it('rollback si falla save en transacción LC', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, dataSource } = createService({
+      registro,
+      failOnSave: true,
+    });
+
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        'LicenciaConstruccion.DescripcionProyecto': 'X',
+      }),
+    ).rejects.toThrow('db fail');
+    expect(dataSource.transaction).toHaveBeenCalled();
+  });
+
+  it('no procesa LC cuando PredioObra almacenado es 0', async () => {
+    const { service, manager } = createService();
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Solo calle',
+      'LicenciaConstruccion.DescripcionProyecto': 'No debe aplicar',
+    });
+
+    expect(manager.create).not.toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.anything(),
+    );
+  });
+
+  it('guarda FirmaPropietario (IdTipoFoto 25) y crea LC si no existe', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, manager, storageService } = createService({
+      registro,
+      licenciaConstruccion: null,
+    });
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [FIRMA_FIELD_NAMES.FirmaPropietario]: [
+          fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+        ],
+      },
+    );
+
+    expect(storageService.saveFirmas).toHaveBeenCalled();
+    expect(manager.create).toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(manager.create).toHaveBeenCalledWith(
+      FotosLicenciaConstruccion,
+      expect.objectContaining({
+        idTipoFoto: 25,
+        ruta: 'https://cdn.example/registros/data/10/25/uuid.png',
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotosLicenciaConstruccion: [
+          expect.objectContaining({ idTipoFoto: 25 }),
+        ],
+      }),
+    );
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('ignora firmas cuando PredioObra efectivo es 0', async () => {
+    const { service, storageService } = createService();
+
+    await service.updateFromMultipart(
+      { idRegistro: '10', Calle: 'X' },
+      {
+        [FIRMA_FIELD_NAMES.FirmaPropietario]: [
+          fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+        ],
+      },
+    );
+
+    expect(storageService.saveFirmas).not.toHaveBeenCalled();
+  });
+
+  it('no ejecuta cleanup físico si falla la BD tras guardar disco (PO=1)', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, storageService, manager } = createService({
+      registro,
+      licenciaConstruccion: { id: 8, idRegistro: 10 } as LicenciaConstruccion,
+    });
+
+    (manager.save as jest.Mock).mockImplementation(async (entity, data?) => {
+      if (entity === FotosLicenciaConstruccion) {
+        throw new Error('foto fail');
+      }
+      const row = data ?? entity;
+      return { id: (row as { id?: number }).id ?? 8, ...row };
+    });
+
+    await expect(
+      service.updateFromMultipart(
+        { idRegistro: '10' },
+        {
+          [FIRMA_FIELD_NAMES.FirmaPropietario]: [
+            fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+          ],
+        },
+      ),
+    ).rejects.toThrow('foto fail');
+
+    expect(storageService.cleanup).not.toHaveBeenCalled();
+  });
+
+  it('crea Foto nueva (IdTipoFoto 3) y Sapac si solo se envía archivo', async () => {
+    const { service, manager, sapacStorageService } = createService({
+      sapac: null,
+    });
+
+    (manager.find as jest.Mock) = jest.fn().mockResolvedValue([]);
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [SAPAC_FILE_FIELD_NAMES.reciboSapac]: [
+          fakePng(SAPAC_FILE_FIELD_NAMES.reciboSapac),
+        ],
+      },
+    );
+
+    expect(sapacStorageService.saveRegistroPhotos).toHaveBeenCalled();
+    expect(manager.create).toHaveBeenCalledWith(
+      Sapac,
+      expect.objectContaining({ idRegistro: 10 }),
+    );
+    expect(manager.create).toHaveBeenCalledWith(
+      Fotos,
+      expect.objectContaining({
+        idTipoFoto: 3,
+        ruta: 'https://cdn.example/registros/data/10/3/nuevo.jpg',
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotos: [
+          expect.objectContaining({
+            idTipoFoto: 3,
+            accion: 'creada',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('actualiza Ruta de Foto existente sin crear duplicado ni cleanup', async () => {
+    const fotoExistente = {
+      id: 100,
+      idRegistro: 10,
+      idTipoFoto: 3,
+      ruta: 'https://cdn.example/registros/data/10/3/anterior.jpg',
+    } as Fotos;
+    const { service, manager, sapacStorageService } = createService();
+
+    (manager.find as jest.Mock) = jest
+      .fn()
+      .mockResolvedValue([fotoExistente]);
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [SAPAC_FILE_FIELD_NAMES.reciboSapac]: [
+          fakePng(SAPAC_FILE_FIELD_NAMES.reciboSapac),
+        ],
+      },
+    );
+
+    expect(sapacStorageService.saveRegistroPhotos).toHaveBeenCalled();
+    expect(sapacStorageService.cleanup).not.toHaveBeenCalled();
+    expect(fotoExistente.ruta).toBe(
+      'https://cdn.example/registros/data/10/3/nuevo.jpg',
+    );
+    expect(manager.create).not.toHaveBeenCalledWith(
+      Fotos,
+      expect.anything(),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotos: [
+          expect.objectContaining({
+            id: 100,
+            idTipoFoto: 3,
+            accion: 'actualizada',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('ignora Sapac.reciboSapac cuando PredioObra efectivo es 1', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, sapacStorageService } = createService({ registro });
+
+    await expect(
+      service.updateFromMultipart(
+        { idRegistro: '10' },
+        {
+          [SAPAC_FILE_FIELD_NAMES.reciboSapac]: [
+            fakePng(SAPAC_FILE_FIELD_NAMES.reciboSapac),
+          ],
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(sapacStorageService.saveRegistroPhotos).not.toHaveBeenCalled();
+  });
+
+  it('acepta solo archivos cuando PredioObra omitido y almacenado es 1', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, storageService } = createService({
+      registro,
+      licenciaConstruccion: { id: 8, idRegistro: 10 } as LicenciaConstruccion,
+    });
+
+    await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [FIRMA_FIELD_NAMES.FirmaDRO]: [fakePng(FIRMA_FIELD_NAMES.FirmaDRO)],
+      },
+    );
+
+    expect(storageService.saveFirmas).toHaveBeenCalled();
+  });
+});
