@@ -4,6 +4,7 @@ import { validate } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { CapturistaVisita } from 'src/entities/CapturistaVisita';
+import { Licencias } from 'src/entities/Licencias';
 import { Registros } from 'src/entities/Registros';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
@@ -49,7 +50,31 @@ function user(
   };
 }
 
-function createQueryBuilderMock() {
+const baseRegistro = {
+  id: 25,
+  registro: 'REG-00025',
+  latitud: 18.9,
+  longitud: -99.2,
+  entidadFederativa: 'Morelos',
+  municipio: 'Cuernavaca',
+  localidad: 'Cuernavaca',
+  colonia: 'Centro',
+  calle: 'Morelos',
+  noInterior: null,
+  noExterior: '100',
+  cp: '62000',
+  tipoRegistro: 1,
+  predioObra: 0,
+  estatus: 4,
+  fechaCreacion: new Date('2026-07-16T14:20:00.000Z'),
+  fechaActualizacion: new Date('2026-07-16T14:20:00.000Z'),
+} as Registros;
+
+function createQueryBuilderMock(options?: {
+  registros?: Registros[];
+  total?: number;
+  licencias?: unknown[];
+}) {
   const qb = {
     select: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
@@ -59,18 +84,40 @@ function createQueryBuilderMock() {
     addOrderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
-    getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
-    getMany: jest.fn().mockResolvedValue([]),
+    getManyAndCount: jest
+      .fn()
+      .mockResolvedValue([options?.registros ?? [], options?.total ?? 0]),
+    getMany: jest.fn().mockResolvedValue(options?.registros ?? []),
   };
+
+  const licenciasQb = {
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(options?.licencias ?? []),
+  };
+
   const createQueryBuilder = jest.fn().mockReturnValue(qb);
-  const getRepository = jest.fn().mockReturnValue({ createQueryBuilder });
+  const createLicenciasQueryBuilder = jest.fn().mockReturnValue(licenciasQb);
+  const getRepository = jest.fn().mockImplementation((entity) => {
+    if (entity === Licencias) {
+      return { createQueryBuilder: createLicenciasQueryBuilder };
+    }
+    return { createQueryBuilder };
+  });
   const service = new RegistrosService(
     { getRepository } as unknown as DataSource,
     {} as never,
     {} as never,
     {} as never,
   );
-  return { qb, createQueryBuilder, getRepository, service };
+  return {
+    qb,
+    licenciasQb,
+    createQueryBuilder,
+    createLicenciasQueryBuilder,
+    getRepository,
+    service,
+  };
 }
 
 describe('GetRegistrosQueryDto', () => {
@@ -226,6 +273,95 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
       b.service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 8 })),
     ).rejects.toThrow('No tienes permisos para consultar los registros.');
   });
+
+  it('incluye Licencias planas en data y conserva paginated', async () => {
+    const licencia = {
+      id: 3,
+      idRegistro: 25,
+      registro: '02062026',
+      nombreComercial: 'BBVA',
+      giro: 'BANCO',
+      licenciaSuelo: '02062026',
+      nombrePropietario: 'Raul',
+      apellidoPaternoPropietario: 'Torres',
+      apellidoMaternoPropietario: 'Tzec',
+      tipoPersona: 1,
+      rfc: 'TOC012026',
+      fechaExpedicion: new Date('2026-07-17T00:32:08.000Z'),
+      fechaRefrendo: new Date('2026-07-17T00:32:08.000Z'),
+      estacionamiento: 1,
+      tipo: 2,
+      fechaHora: new Date('2026-07-17T00:32:08.000Z'),
+      fechaCreacion: new Date('2026-07-17T00:32:53.000Z'),
+      fechaActualizacion: new Date('2026-07-17T00:32:53.000Z'),
+    };
+
+    const { licenciasQb, getRepository, service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 1,
+      licencias: [licencia],
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(getRepository).toHaveBeenCalledWith(Licencias);
+    expect(licenciasQb.where).toHaveBeenCalledWith(
+      'licencias.idRegistro IN (:...idsRegistro)',
+      { idsRegistro: [25] },
+    );
+    expect(result).toHaveProperty('data');
+    expect(result).toHaveProperty('paginated');
+    expect(result.paginated).toEqual({ total: 1, page: 1, lastPage: 1 });
+    expect(result.data[0]).not.toHaveProperty('Licencias');
+    expect(result.data[0]).not.toHaveProperty('licencias');
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        id: 25,
+        registro: 'REG-00025',
+        idLicencia: 3,
+        idRegistroLicencia: 25,
+        registroLicencia: '02062026',
+        nombreComercial: 'BBVA',
+        giro: 'BANCO',
+        tipoLicencia: 2,
+        fechaCreacionLicencia: licencia.fechaCreacion,
+      }),
+    );
+  });
+
+  it('sin Licencias rellena atributos null y no altera el total', async () => {
+    const { createLicenciasQueryBuilder, service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 5,
+      licencias: [],
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(createLicenciasQueryBuilder).toHaveBeenCalled();
+    expect(result.paginated?.total).toBe(5);
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        id: 25,
+        idLicencia: null,
+        nombreComercial: null,
+        tipoLicencia: null,
+        fechaCreacionLicencia: null,
+      }),
+    );
+  });
+
+  it('no consulta Licencias si la página está vacía', async () => {
+    const { createLicenciasQueryBuilder, service } = createQueryBuilderMock();
+    await service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 4 }));
+    expect(createLicenciasQueryBuilder).not.toHaveBeenCalled();
+  });
 });
 
 describe('RegistrosService.findByDateRange', () => {
@@ -349,56 +485,66 @@ describe('RegistrosService.findByDateRange', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('devuelve data vacía sin 404 y sin columnas de CapturistaVisita', async () => {
-    const { qb, service } = createQueryBuilderMock();
-    qb.getMany.mockResolvedValue([]);
+  it('devuelve arreglo vacío sin data wrapper', async () => {
+    const { service } = createQueryBuilderMock();
 
     const result = await service.findByDateRange(
       { fechaInicio: '2026-07-01', fechaFin: '2026-07-16' },
       user({ rol: 4 }),
     );
 
-    expect(result).toEqual({
-      status: 'success',
-      message: 'Registros obtenidos correctamente por rango de fechas.',
-      data: [],
-    });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual([]);
+    expect(result).not.toHaveProperty('data');
   });
 
-  it('mapea solo columnas de Registros', async () => {
-    const { qb, service } = createQueryBuilderMock();
-    qb.getMany.mockResolvedValue([
-      {
-        id: 25,
-        registro: 'REG-00025',
-        latitud: 18.9,
-        longitud: -99.2,
-        entidadFederativa: 'Morelos',
-        municipio: 'Cuernavaca',
-        localidad: 'Cuernavaca',
-        colonia: 'Centro',
-        calle: 'Morelos',
-        noInterior: null,
-        noExterior: '100',
-        cp: '62000',
-        tipoRegistro: 1,
-        predioObra: 0,
-        estatus: 4,
-        fechaCreacion: new Date('2026-07-16T14:20:00.000Z'),
-        fechaActualizacion: new Date('2026-07-16T14:20:00.000Z'),
-      },
-    ]);
+  it('fusiona Licencias en camelCase sin anidar', async () => {
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      licencias: [
+        {
+          id: 3,
+          idRegistro: 25,
+          registro: 'LIC-25',
+          nombreComercial: 'BBVA',
+          giro: 'BANCO',
+          licenciaSuelo: null,
+          nombrePropietario: null,
+          apellidoPaternoPropietario: null,
+          apellidoMaternoPropietario: null,
+          tipoPersona: 1,
+          rfc: null,
+          fechaExpedicion: null,
+          fechaRefrendo: null,
+          estacionamiento: null,
+          tipo: 2,
+          fechaHora: null,
+          fechaCreacion: new Date('2026-07-16T14:20:00.000Z'),
+          fechaActualizacion: new Date('2026-07-16T14:20:00.000Z'),
+        },
+      ],
+    });
 
     const result = await service.findByDateRange(
       { fechaInicio: '2026-07-01', fechaFin: '2026-07-16' },
       user({ rol: 4 }),
     );
 
-    expect(result.data[0]).toEqual(
-      expect.objectContaining({ id: 25, municipio: 'Cuernavaca', estatus: 4 }),
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0]).not.toHaveProperty('Licencias');
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        id: 25,
+        municipio: 'Cuernavaca',
+        estatus: 4,
+        idLicencia: 3,
+        registroLicencia: 'LIC-25',
+        nombreComercial: 'BBVA',
+        tipoLicencia: 2,
+      }),
     );
-    expect(result.data[0]).not.toHaveProperty('idCapturista');
-    expect(result.data[0]).not.toHaveProperty('idGrupo');
-    expect(result.data[0]).not.toHaveProperty('capturistaVisitas');
+    expect(result[0]).not.toHaveProperty('idCapturista');
+    expect(result[0]).not.toHaveProperty('idGrupo');
   });
 });
