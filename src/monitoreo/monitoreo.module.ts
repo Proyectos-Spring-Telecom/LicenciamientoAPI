@@ -12,6 +12,7 @@ import { Licencias } from 'src/entities/Licencias';
 import { ProteccionCivil } from 'src/entities/ProteccionCivil';
 import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
+import { Usuarios } from 'src/entities/Usuarios';
 import { MonitoreoController } from './monitoreo.controller';
 import { MonitoreoService } from './monitoreo.service';
 
@@ -20,6 +21,7 @@ import { MonitoreoService } from './monitoreo.service';
     TypeOrmModule.forFeature([
       Registros,
       CapturistaVisita,
+      Usuarios,
       Sapac,
       Catastro,
       Licencias,

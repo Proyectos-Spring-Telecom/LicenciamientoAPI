@@ -42,9 +42,9 @@ El servicio no utiliza paginación ni filtros de fecha.
 - Rol 2: registros asociados a su grupo.
 - Rol 1: registros capturados por el usuario.
 
-Cada elemento es un objeto plano en camelCase: atributos de Registros más
-atributos de Licencias en el mismo nivel (p. ej. idLicencia, nombreComercial).
-Si no hay fila de Licencias, esos atributos se devuelven como null.
+Cada elemento es un objeto plano en camelCase: atributos de Registros,
+Licencias y CapturistaVisita/Usuarios (capturista y supervisor) en el mismo nivel.
+Si no hay fila relacionada, esos atributos se devuelven como null.
 
 Orden: FechaCreacion DESC, Id DESC.
 No recibe parámetros de consulta.
@@ -52,7 +52,7 @@ No recibe parámetros de consulta.
   })
   @ApiOkResponse({
     description:
-      'Arreglo plano de monitoreo (Registros + Licencias). Sin wrapper data ni objeto Licencias anidado.',
+      'Arreglo plano de monitoreo (Registros + Licencias + capturista/supervisor). Sin wrapper data ni objetos anidados.',
     type: MonitoreoListadoItemDto,
     isArray: true,
   })
@@ -72,11 +72,16 @@ No recibe parámetros de consulta.
   @ApiOperation({
     summary: 'Obtiene el detalle completo de un registro',
     description: `
-Devuelve un único registro y todos sus datos relacionados
-con la misma nomenclatura del POST /registros.
+Devuelve un único registro visible para el usuario autenticado y todos sus datos relacionados.
+Los campos del registro principal están en camelCase.
 
-No aplica filtros por rol, grupo ni capturista.
-Solo consulta \`Registros.Id = :idRegistro\`.
+Incluye campos planos de CapturistaVisita y nombres de capturista/supervisor
+(Usuarios), también en camelCase y en el mismo nivel (sin objetos anidados):
+idCapturista, nombreCompletoCapturista, idSupervisor, nombreCompletoSupervisor, etc.
+Si no hay visita o faltan usuarios, esos atributos se devuelven como null.
+
+Aplica la misma visualización por rol del listado:
+Rol 4/3: todos; Rol 2: grupo; Rol 1: capturista.
 `,
   })
   @ApiParam({
@@ -87,7 +92,8 @@ Solo consulta \`Registros.Id = :idRegistro\`.
   })
   @ApiResponse({
     status: 200,
-    description: 'Detalle completo del registro',
+    description:
+      'Detalle del registro (camelCase) con capturista/supervisor planos y relaciones según PredioObra',
   })
   @ApiResponse({
     status: 400,
@@ -97,7 +103,8 @@ Solo consulta \`Registros.Id = :idRegistro\`.
   @ApiResponse({ status: 404, description: 'Registro no encontrado' })
   findOne(
     @Param('idRegistro', ParseIntPipe) idRegistro: number,
+    @Request() req: { user: AuthenticatedUser },
   ) {
-    return this.monitoreoService.findOne(idRegistro);
+    return this.monitoreoService.findOne(idRegistro, req.user);
   }
 }

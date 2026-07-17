@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { CapturistaVisita } from 'src/entities/CapturistaVisita';
 import { Catastro } from 'src/entities/Catastro';
@@ -21,6 +21,7 @@ import { Licencias } from 'src/entities/Licencias';
 import { ProteccionCivil } from 'src/entities/ProteccionCivil';
 import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
+import { Usuarios } from 'src/entities/Usuarios';
 import { CATASTRO_TIPO_FOTO } from 'src/registros/catastro.constants';
 import {
   FIRMA_TIPO_FOTO,
@@ -33,6 +34,28 @@ import { MonitoreoListadoItemDto } from './dto/monitoreo-listado-item.dto';
 
 type FotoRow = { id: number; idTipoFoto: number | null; ruta: string | null };
 
+type CapturistaVisitaFlatFields = {
+  idCapturistaVisita: number | null;
+  idRegistroCapturistaVisita: number | null;
+  idCapturista: number | null;
+  nombreCapturista: string | null;
+  apellidoPaternoCapturista: string | null;
+  apellidoMaternoCapturista: string | null;
+  nombreCompletoCapturista: string | null;
+  idSupervisor: number | null;
+  nombreSupervisor: string | null;
+  apellidoPaternoSupervisor: string | null;
+  apellidoMaternoSupervisor: string | null;
+  nombreCompletoSupervisor: string | null;
+  idGrupoCapturistaVisita: number | null;
+  fechaHoraCapturistaVisita: Date | null;
+};
+
+type UsuarioNombre = Pick<
+  Usuarios,
+  'id' | 'nombre' | 'apellidoPaterno' | 'apellidoMaterno'
+>;
+
 @Injectable()
 export class MonitoreoService {
   constructor(
@@ -40,6 +63,8 @@ export class MonitoreoService {
     private readonly registrosRepository: Repository<Registros>,
     @InjectRepository(CapturistaVisita)
     private readonly capturistaVisitaRepository: Repository<CapturistaVisita>,
+    @InjectRepository(Usuarios)
+    private readonly usuariosRepository: Repository<Usuarios>,
     @InjectRepository(Sapac)
     private readonly sapacRepository: Repository<Sapac>,
     @InjectRepository(Catastro)
@@ -155,14 +180,18 @@ export class MonitoreoService {
         .addOrderBy('registro.id', 'DESC');
 
       const registros = await queryBuilder.getMany();
-      const licenciasByRegistroId = await this.loadLicenciasByRegistroIds(
-        registros.map((registro) => Number(registro.id)),
-      );
+      const idsRegistro = registros.map((registro) => Number(registro.id));
+      const [licenciasByRegistroId, visitasByRegistroId] = await Promise.all([
+        this.loadLicenciasByRegistroIds(idsRegistro),
+        this.loadCapturistaVisitaFieldsByRegistroIds(idsRegistro),
+      ]);
 
       return registros.map((registro) =>
         this.mapListItem(
           registro,
           licenciasByRegistroId.get(Number(registro.id)) ?? null,
+          visitasByRegistroId.get(Number(registro.id)) ??
+            this.buildNullCapturistaVisitaFields(),
         ),
       );
     } catch (error) {
@@ -207,10 +236,13 @@ export class MonitoreoService {
   }
 
   /**
-   * Detalle completo de un registro (sin filtro por rol).
-   * Nomenclatura alineada al POST /registros (PascalCase + bloques anidados).
+   * Detalle completo de un registro con visibilidad según rol.
+   * Registro y relaciones existentes + campos planos de CapturistaVisita/Usuarios.
    */
-  async findOne(idRegistro: number): Promise<{ data: Record<string, unknown> }> {
+  async findOne(
+    idRegistro: number,
+    user: AuthenticatedUser,
+  ): Promise<{ data: Record<string, unknown> }> {
     try {
       if (!Number.isInteger(idRegistro) || idRegistro < 1) {
         throw new BadRequestException(
@@ -226,14 +258,15 @@ export class MonitoreoService {
         throw new NotFoundException('El registro solicitado no existe.');
       }
 
-      const capturistaVisita = await this.capturistaVisitaRepository.findOne({
-        where: { idRegistro },
-        order: { id: 'DESC' },
-      });
+      await this.assertRegistroVisibleByRole(idRegistro, user);
+
+      const visitaFields = await this.loadCapturistaVisitaDetailFields(
+        idRegistro,
+      );
 
       const base = {
         ...this.mapRegistroDetail(registro),
-        CapturistaVisita: this.mapCapturistaVisita(capturistaVisita),
+        ...visitaFields,
       };
 
       if (Number(registro.predioObra) === 0) {
@@ -263,6 +296,242 @@ export class MonitoreoService {
         'Error al obtener el detalle del registro',
       );
     }
+  }
+
+  private async assertRegistroVisibleByRole(
+    idRegistro: number,
+    user: AuthenticatedUser,
+  ): Promise<void> {
+    const idRol = Number(user.rol);
+    const idUsuario = user.userId;
+    const idGrupo = user.idGrupo;
+
+    switch (idRol) {
+      case 4:
+      case 3:
+        return;
+
+      case 2:
+        if (
+          idGrupo === undefined ||
+          idGrupo === null ||
+          String(idGrupo).trim() === ''
+        ) {
+          throw new ForbiddenException(
+            'El usuario supervisor no tiene un grupo asignado.',
+          );
+        }
+
+        if (
+          !(await this.capturistaVisitaRepository.findOne({
+            where: { idRegistro, idGrupo },
+          }))
+        ) {
+          throw new ForbiddenException(
+            'No tienes permisos para consultar el monitoreo.',
+          );
+        }
+        return;
+
+      case 1:
+        if (
+          idUsuario === undefined ||
+          idUsuario === null ||
+          String(idUsuario).trim() === ''
+        ) {
+          throw new ForbiddenException(
+            'No fue posible identificar al usuario autenticado.',
+          );
+        }
+
+        if (
+          !(await this.capturistaVisitaRepository.findOne({
+            where: { idRegistro, idCapturista: idUsuario },
+          }))
+        ) {
+          throw new ForbiddenException(
+            'No tienes permisos para consultar el monitoreo.',
+          );
+        }
+        return;
+
+      default:
+        throw new ForbiddenException(
+          'No tienes permisos para consultar el monitoreo.',
+        );
+    }
+  }
+
+  /**
+   * Visita más reciente + nombres de capturista/supervisor para un registro.
+   */
+  private async loadCapturistaVisitaDetailFields(
+    idRegistro: number,
+  ): Promise<CapturistaVisitaFlatFields> {
+    const map = await this.loadCapturistaVisitaFieldsByRegistroIds([
+      idRegistro,
+    ]);
+    return map.get(idRegistro) ?? this.buildNullCapturistaVisitaFields();
+  }
+
+  /**
+   * Carga la visita más reciente por registro y resuelve nombres de Usuarios.
+   * Orden: FechaHora DESC, Id DESC. Sin N+1.
+   */
+  private async loadCapturistaVisitaFieldsByRegistroIds(
+    idsRegistro: number[],
+  ): Promise<Map<number, CapturistaVisitaFlatFields>> {
+    const result = new Map<number, CapturistaVisitaFlatFields>();
+    if (idsRegistro.length === 0) {
+      return result;
+    }
+
+    const visitas = await this.capturistaVisitaRepository
+      .createQueryBuilder('capturistaVisita')
+      .where('capturistaVisita.idRegistro IN (:...idsRegistro)', {
+        idsRegistro,
+      })
+      .orderBy('capturistaVisita.fechaHora', 'DESC')
+      .addOrderBy('capturistaVisita.id', 'DESC')
+      .getMany();
+
+    const visitaByRegistroId = new Map<number, CapturistaVisita>();
+    for (const visita of visitas) {
+      if (visita.idRegistro == null) {
+        continue;
+      }
+      const idRegistro = Number(visita.idRegistro);
+      if (!visitaByRegistroId.has(idRegistro)) {
+        visitaByRegistroId.set(idRegistro, visita);
+      }
+    }
+
+    const idsUsuario = new Set<number>();
+    for (const visita of visitaByRegistroId.values()) {
+      if (visita.idCapturista != null) {
+        idsUsuario.add(Number(visita.idCapturista));
+      }
+      if (visita.idSupervisor != null) {
+        idsUsuario.add(Number(visita.idSupervisor));
+      }
+    }
+
+    const usuariosById = await this.loadUsuariosNombreByIds([...idsUsuario]);
+
+    for (const [idRegistro, visita] of visitaByRegistroId) {
+      result.set(
+        idRegistro,
+        this.mapCapturistaVisitaFields(visita, usuariosById),
+      );
+    }
+
+    return result;
+  }
+
+  private async loadUsuariosNombreByIds(
+    idsUsuario: number[],
+  ): Promise<Map<number, UsuarioNombre>> {
+    const map = new Map<number, UsuarioNombre>();
+    if (idsUsuario.length === 0) {
+      return map;
+    }
+
+    const usuarios = await this.usuariosRepository.find({
+      where: { id: In(idsUsuario) },
+      select: ['id', 'nombre', 'apellidoPaterno', 'apellidoMaterno'],
+    });
+
+    for (const usuario of usuarios) {
+      map.set(Number(usuario.id), usuario);
+    }
+
+    return map;
+  }
+
+  private mapCapturistaVisitaFields(
+    visita: CapturistaVisita,
+    usuariosById: Map<number, UsuarioNombre>,
+  ): CapturistaVisitaFlatFields {
+    const idCapturista =
+      visita.idCapturista != null ? Number(visita.idCapturista) : null;
+    const idSupervisor =
+      visita.idSupervisor != null ? Number(visita.idSupervisor) : null;
+
+    const capturista =
+      idCapturista != null ? (usuariosById.get(idCapturista) ?? null) : null;
+    const supervisor =
+      idSupervisor != null ? (usuariosById.get(idSupervisor) ?? null) : null;
+
+    const nombreCapturista = capturista?.nombre ?? null;
+    const apellidoPaternoCapturista = capturista?.apellidoPaterno ?? null;
+    const apellidoMaternoCapturista = capturista?.apellidoMaterno ?? null;
+
+    const nombreSupervisor = supervisor?.nombre ?? null;
+    const apellidoPaternoSupervisor = supervisor?.apellidoPaterno ?? null;
+    const apellidoMaternoSupervisor = supervisor?.apellidoMaterno ?? null;
+
+    return {
+      idCapturistaVisita: Number(visita.id),
+      idRegistroCapturistaVisita:
+        visita.idRegistro != null ? Number(visita.idRegistro) : null,
+      idCapturista,
+      nombreCapturista,
+      apellidoPaternoCapturista,
+      apellidoMaternoCapturista,
+      nombreCompletoCapturista: this.buildNombreCompleto(
+        nombreCapturista,
+        apellidoPaternoCapturista,
+        apellidoMaternoCapturista,
+      ),
+      idSupervisor,
+      nombreSupervisor,
+      apellidoPaternoSupervisor,
+      apellidoMaternoSupervisor,
+      nombreCompletoSupervisor: this.buildNombreCompleto(
+        nombreSupervisor,
+        apellidoPaternoSupervisor,
+        apellidoMaternoSupervisor,
+      ),
+      idGrupoCapturistaVisita:
+        visita.idGrupo != null ? Number(visita.idGrupo) : null,
+      fechaHoraCapturistaVisita: visita.fechaHora ?? null,
+    };
+  }
+
+  private buildNullCapturistaVisitaFields(): CapturistaVisitaFlatFields {
+    return {
+      idCapturistaVisita: null,
+      idRegistroCapturistaVisita: null,
+      idCapturista: null,
+      nombreCapturista: null,
+      apellidoPaternoCapturista: null,
+      apellidoMaternoCapturista: null,
+      nombreCompletoCapturista: null,
+      idSupervisor: null,
+      nombreSupervisor: null,
+      apellidoPaternoSupervisor: null,
+      apellidoMaternoSupervisor: null,
+      nombreCompletoSupervisor: null,
+      idGrupoCapturistaVisita: null,
+      fechaHoraCapturistaVisita: null,
+    };
+  }
+
+  private buildNombreCompleto(
+    nombre: string | null | undefined,
+    apellidoPaterno: string | null | undefined,
+    apellidoMaterno: string | null | undefined,
+  ): string | null {
+    const partes = [nombre, apellidoPaterno, apellidoMaterno].filter(
+      (valor) =>
+        valor !== null &&
+        valor !== undefined &&
+        String(valor).trim() !== '',
+    );
+    if (partes.length === 0) {
+      return null;
+    }
+    return partes.map((valor) => String(valor).trim()).join(' ');
   }
 
   private async buildPredioDetail(idRegistro: number) {
@@ -404,36 +673,23 @@ export class MonitoreoService {
 
   private mapRegistroDetail(registro: Registros) {
     return {
-      Id: Number(registro.id),
-      Registro: registro.registro,
-      Latitud: registro.latitud,
-      Longitud: registro.longitud,
-      EntidadFederativa: registro.entidadFederativa,
-      Municipio: registro.municipio,
-      Localidad: registro.localidad,
-      Colonia: registro.colonia,
-      Calle: registro.calle,
-      NoInterior: registro.noInterior,
-      NoExterior: registro.noExterior,
-      CP: registro.cp,
-      TipoRegistro: registro.tipoRegistro,
-      PredioObra: registro.predioObra,
-      Estatus: registro.estatus,
-      FechaCreacion: registro.fechaCreacion,
-      FechaActualizacion: registro.fechaActualizacion,
-    };
-  }
-
-  private mapCapturistaVisita(visita: CapturistaVisita | null) {
-    if (!visita) return null;
-    return {
-      Id: Number(visita.id),
-      IdRegistro: visita.idRegistro != null ? Number(visita.idRegistro) : null,
-      IdCapturista: visita.idCapturista != null ? Number(visita.idCapturista) : null,
-      IdSupervisor:
-        visita.idSupervisor != null ? Number(visita.idSupervisor) : null,
-      IdGrupo: visita.idGrupo != null ? Number(visita.idGrupo) : null,
-      FechaHora: visita.fechaHora,
+      id: Number(registro.id),
+      registro: registro.registro ?? null,
+      latitud: registro.latitud ?? null,
+      longitud: registro.longitud ?? null,
+      entidadFederativa: registro.entidadFederativa ?? null,
+      municipio: registro.municipio ?? null,
+      localidad: registro.localidad ?? null,
+      colonia: registro.colonia ?? null,
+      calle: registro.calle ?? null,
+      noInterior: registro.noInterior ?? null,
+      noExterior: registro.noExterior ?? null,
+      cp: registro.cp ?? null,
+      tipoRegistro: registro.tipoRegistro ?? null,
+      predioObra: registro.predioObra ?? null,
+      estatus: registro.estatus ?? null,
+      fechaCreacion: registro.fechaCreacion ?? null,
+      fechaActualizacion: registro.fechaActualizacion ?? null,
     };
   }
 
@@ -651,6 +907,7 @@ export class MonitoreoService {
   private mapListItem(
     registro: Registros,
     licencia: Licencias | null,
+    visitaFields: CapturistaVisitaFlatFields,
   ): MonitoreoListadoItemDto {
     return {
       id: Number(registro.id),
@@ -692,6 +949,8 @@ export class MonitoreoService {
       fechaHoraLicencia: licencia?.fechaHora ?? null,
       fechaCreacionLicencia: licencia?.fechaCreacion ?? null,
       fechaActualizacionLicencia: licencia?.fechaActualizacion ?? null,
+
+      ...visitaFields,
     };
   }
 }
