@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Bitacora } from './Bitacora';
+import { CodigoAutenticacion } from './CodigoAutenticacion';
 import { Grupos } from './Grupos';
 import { RefreshSessions } from './RefreshSessions';
 import { Roles } from './Roles';
@@ -72,6 +73,12 @@ export class Usuarios {
 
   @OneToMany(() => RefreshSessions, (refreshSession) => refreshSession.usuario)
   refreshSessions: RefreshSessions[];
+
+  @OneToMany(
+    () => CodigoAutenticacion,
+    (codigoAutenticacion) => codigoAutenticacion.usuario,
+  )
+  codigosAutenticacion: CodigoAutenticacion[];
 
   @ManyToOne(() => Roles, (roles) => roles.usuarios, {
     onDelete: 'NO ACTION',
