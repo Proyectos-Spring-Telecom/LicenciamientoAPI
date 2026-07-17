@@ -10,6 +10,7 @@ import { RolesModule } from './roles/roles.module';
 import { MailModule } from './mail/mail.module';
 import { RegistrosModule } from './registros/registros.module';
 import { MonitoreoModule } from './monitoreo/monitoreo.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import Joi from 'joi';
 
 @Module({
@@ -79,6 +80,8 @@ import Joi from 'joi';
     RegistrosModule,
 
     MonitoreoModule,
+
+    DashboardModule,
   ],
 })
 export class AppModule { }
