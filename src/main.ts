@@ -39,7 +39,8 @@ async function bootstrap() {
     .addTag('Permisos', 'Gestión de permisos')
     .addTag('Roles', 'Gestión de roles y su relación con permisos')
     .addTag('Usuarios', 'Gestión de usuarios')
-    .addTag('Registros', 'Alta de registros del padrón')
+    .addTag('Registros', 'Alta de registros del padr?n')
+    .addTag('Dashboard', 'Res?menes y tarjetas del dashboard')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
