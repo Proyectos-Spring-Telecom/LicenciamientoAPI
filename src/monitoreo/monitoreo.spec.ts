@@ -28,11 +28,58 @@ function emptyRepo(): Repository<any> {
   } as unknown as Repository<any>;
 }
 
+/** Claves de nivel superior sin aliases PascalCase / objetos anidados de relaciones. */
+function assertFlatItemKeysUnique(item: Record<string, unknown>) {
+  const keys = Object.keys(item);
+  expect(new Set(keys).size).toBe(keys.length);
+
+  for (const forbidden of [
+    'Id',
+    'IdRegistro',
+    'IdCapturista',
+    'IdSupervisor',
+    'IdGrupo',
+    'NombreComercial',
+    'FechaHora',
+    'Fotos',
+    'capturista',
+    'supervisor',
+    'CapturistaVisita',
+    'Licencias',
+    'licencias',
+    'grupos',
+    'imagenes',
+    'fotografias',
+    'idGrupo',
+  ]) {
+    expect(item).not.toHaveProperty(forbidden);
+  }
+
+  expect(item).toHaveProperty('fotos');
+  expect(Array.isArray(item.fotos)).toBe(true);
+  expect(item.fotos).not.toBeNull();
+
+  const fotos = item.fotos as Array<Record<string, unknown>>;
+  const idsFotos = fotos.map((foto) => String(foto.id));
+  expect(new Set(idsFotos).size).toBe(idsFotos.length);
+
+  for (const foto of fotos) {
+    const fotoKeys = Object.keys(foto);
+    expect(new Set(fotoKeys).size).toBe(fotoKeys.length);
+    expect(foto).not.toHaveProperty('Id');
+    expect(foto).not.toHaveProperty('Ruta');
+    expect(foto).not.toHaveProperty('IdTipoFoto');
+    expect(foto).not.toHaveProperty('idFoto');
+  }
+}
+
 function createListService(options?: {
   registros?: Registros[];
   licencias?: unknown[];
   visitas?: unknown[];
   usuarios?: unknown[];
+  grupos?: unknown[];
+  fotos?: unknown[];
 }) {
   const qb = {
     select: jest.fn().mockReturnThis(),
@@ -78,17 +125,36 @@ function createListService(options?: {
     findOne: jest.fn(),
   } as unknown as Repository<any>;
 
+  const gruposRepository = {
+    find: jest.fn().mockResolvedValue(options?.grupos ?? []),
+    findOne: jest.fn(),
+  } as unknown as Repository<any>;
+
+  const fotosQb = {
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(options?.fotos ?? []),
+  };
+  const fotosRepository = {
+    createQueryBuilder: jest.fn().mockReturnValue(fotosQb),
+    find: jest.fn().mockResolvedValue([]),
+  } as unknown as Repository<any>;
+
   const service = new MonitoreoService(
     registrosRepository,
     capturistaVisitaRepository,
     usuariosRepository,
+    gruposRepository,
     emptyRepo(),
     emptyRepo(),
     licenciasRepository,
     emptyRepo(),
     emptyRepo(),
     emptyRepo(),
-    emptyRepo(),
+    fotosRepository,
     emptyRepo(),
     emptyRepo(),
     emptyRepo(),
@@ -102,6 +168,9 @@ function createListService(options?: {
     capturistaVisitaRepository,
     visitasQb,
     usuariosRepository,
+    gruposRepository,
+    fotosRepository,
+    fotosQb,
     service,
   };
 }
@@ -115,7 +184,9 @@ function createDetailService(overrides?: {
     nombre: string | null;
     apellidoPaterno: string | null;
     apellidoMaterno: string | null;
+    idGrupo?: number | null;
   }>;
+  grupos?: Array<{ id: number; nombre: string | null }>;
   sapac?: unknown;
   catastro?: unknown;
   licencias?: unknown;
@@ -123,6 +194,7 @@ function createDetailService(overrides?: {
   proteccionCivil?: unknown;
   contactoRepresentante?: unknown;
   fotos?: unknown[];
+  fotosListado?: unknown[];
   licenciaConstruccion?: unknown;
   corresponsables?: unknown[];
   fotosLc?: unknown[];
@@ -152,6 +224,11 @@ function createDetailService(overrides?: {
     findOne: jest.fn(),
   } as unknown as Repository<any>;
 
+  const gruposRepository = {
+    find: jest.fn().mockResolvedValue(overrides?.grupos ?? []),
+    findOne: jest.fn(),
+  } as unknown as Repository<any>;
+
   const sapacRepository = {
     findOne: jest.fn().mockResolvedValue(overrides?.sapac ?? null),
   } as unknown as Repository<any>;
@@ -172,8 +249,18 @@ function createDetailService(overrides?: {
       .fn()
       .mockResolvedValue(overrides?.contactoRepresentante ?? null),
   } as unknown as Repository<any>;
+
+  const fotosQb = {
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(overrides?.fotosListado ?? []),
+  };
   const fotosRepository = {
     find: jest.fn().mockResolvedValue(overrides?.fotos ?? []),
+    createQueryBuilder: jest.fn().mockReturnValue(fotosQb),
   } as unknown as Repository<any>;
   const licenciaConstruccionRepository = {
     findOne: jest
@@ -191,6 +278,7 @@ function createDetailService(overrides?: {
     registrosRepository,
     capturistaVisitaRepository,
     usuariosRepository,
+    gruposRepository,
     sapacRepository,
     catastroRepository,
     licenciasRepository,
@@ -209,8 +297,10 @@ function createDetailService(overrides?: {
     capturistaVisitaRepository,
     visitasQb,
     usuariosRepository,
+    gruposRepository,
     sapacRepository,
     fotosRepository,
+    fotosQb,
     licenciaConstruccionRepository,
     corresponsablesRepository,
     fotosLicenciaConstruccionRepository,
@@ -352,7 +442,7 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
       fechaActualizacion: new Date('2026-07-16T15:00:00.000Z'),
     };
 
-    const { licenciasQb, visitasQb, usuariosRepository, service } =
+    const { licenciasQb, visitasQb, usuariosRepository, gruposRepository, fotosQb, service } =
       createListService({
         registros: [baseRegistro],
         licencias: [licencia],
@@ -372,12 +462,34 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
             nombre: 'Juan',
             apellidoPaterno: 'Pérez',
             apellidoMaterno: 'López',
+            idGrupo: 2,
           },
           {
             id: 15,
             nombre: 'María',
             apellidoPaterno: 'Torres',
             apellidoMaterno: 'García',
+            idGrupo: 3,
+          },
+        ],
+        grupos: [
+          { id: 2, nombre: 'Grupo Norte' },
+          { id: 3, nombre: 'Supervisores Centro' },
+        ],
+        fotos: [
+          {
+            id: 21,
+            idRegistro: 150,
+            ruta: '/registros/data/foto-1.jpg',
+            fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+            idTipoFoto: 6,
+          },
+          {
+            id: 22,
+            idRegistro: 150,
+            ruta: '/registros/data/foto-2.jpg',
+            fechaHora: new Date('2026-07-17T10:31:00.000Z'),
+            idTipoFoto: 7,
           },
         ],
       });
@@ -393,6 +505,11 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
       { idsRegistro: [150] },
     );
     expect(usuariosRepository.find).toHaveBeenCalled();
+    expect(gruposRepository.find).toHaveBeenCalled();
+    expect(fotosQb.andWhere).toHaveBeenCalledWith(
+      'foto.idTipoFoto IN (:...tiposFoto)',
+      { tiposFoto: [6, 7, 8] },
+    );
     expect(Array.isArray(result)).toBe(true);
     expect(result).not.toHaveProperty('data');
     expect(result).toHaveLength(1);
@@ -427,11 +544,31 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
         apellidoPaternoCapturista: 'Pérez',
         apellidoMaternoCapturista: 'López',
         nombreCompletoCapturista: 'Juan Pérez López',
+        idGrupoCapturista: 2,
+        nombreGrupoCapturista: 'Grupo Norte',
         idSupervisor: 15,
         nombreSupervisor: 'María',
         apellidoPaternoSupervisor: 'Torres',
         apellidoMaternoSupervisor: 'García',
         nombreCompletoSupervisor: 'María Torres García',
+        idGrupoSupervisor: 3,
+        nombreGrupoSupervisor: 'Supervisores Centro',
+        fotos: [
+          {
+            id: 21,
+            idRegistro: 150,
+            ruta: '/registros/data/foto-1.jpg',
+            fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+            idTipoFoto: 6,
+          },
+          {
+            id: 22,
+            idRegistro: 150,
+            ruta: '/registros/data/foto-2.jpg',
+            fechaHora: new Date('2026-07-17T10:31:00.000Z'),
+            idTipoFoto: 7,
+          },
+        ],
       }),
     );
   });
@@ -476,10 +613,15 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
         idCapturistaVisita: null,
         idCapturista: null,
         nombreCompletoCapturista: null,
+        idGrupoCapturista: null,
+        nombreGrupoCapturista: null,
         idSupervisor: null,
         nombreCompletoSupervisor: null,
+        idGrupoSupervisor: null,
+        nombreGrupoSupervisor: null,
         idGrupoCapturistaVisita: null,
         fechaHoraCapturistaVisita: null,
+        fotos: [],
       }),
     );
     expect(licenciasRepository.createQueryBuilder).toHaveBeenCalled();
@@ -488,11 +630,62 @@ describe('MonitoreoService.findAll (arreglo plano)', () => {
   });
 
   it('no consulta Licencias ni visitas cuando el listado está vacío', async () => {
-    const { licenciasRepository, capturistaVisitaRepository, service } =
-      createListService();
+    const {
+      licenciasRepository,
+      capturistaVisitaRepository,
+      fotosRepository,
+      service,
+    } = createListService();
     await service.findAll(user({ rol: 4 }));
     expect(licenciasRepository.createQueryBuilder).not.toHaveBeenCalled();
     expect(capturistaVisitaRepository.createQueryBuilder).not.toHaveBeenCalled();
+    expect(fotosRepository.createQueryBuilder).not.toHaveBeenCalled();
+  });
+
+  it('conserva idGrupo si no hay fila en Grupos', async () => {
+    const { service } = createListService({
+      registros: [baseRegistro],
+      visitas: [
+        {
+          id: 1,
+          idRegistro: 150,
+          idCapturista: 20,
+          idSupervisor: 15,
+          idGrupo: 7,
+          fechaHora: new Date('2026-07-16T15:00:00.000Z'),
+        },
+      ],
+      usuarios: [
+        {
+          id: 20,
+          nombre: 'Juan',
+          apellidoPaterno: 'Pérez',
+          apellidoMaterno: null,
+          idGrupo: 10,
+        },
+        {
+          id: 15,
+          nombre: 'María',
+          apellidoPaterno: 'Torres',
+          apellidoMaterno: null,
+          idGrupo: null,
+        },
+      ],
+      grupos: [],
+      fotos: [],
+    });
+
+    const result = await service.findAll(user({ rol: 4 }));
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        idGrupoCapturistaVisita: 7,
+        idGrupoCapturista: 10,
+        nombreGrupoCapturista: null,
+        idGrupoSupervisor: null,
+        nombreGrupoSupervisor: null,
+        fotos: [],
+      }),
+    );
   });
 
   it('elige la Licencias y visita de Id más reciente ante duplicados', async () => {
@@ -629,52 +822,73 @@ describe('MonitoreoService.findOne', () => {
 
   it('consulta solo por Id e incluye capturista/supervisor planos', async () => {
     const fechaVisita = new Date('2026-07-17T00:32:08.000Z');
-    const { service, registrosRepository, visitasQb, usuariosRepository } =
-      createDetailService({
-        registro: baseRegistro,
-        capturistaVisita: {
-          id: 4,
-          idRegistro: 150,
-          idCapturista: 20,
-          idSupervisor: 15,
-          idGrupo: 7,
-          fechaHora: fechaVisita,
-        } as CapturistaVisita,
-        usuarios: [
-          {
-            id: 20,
-            nombre: 'Juan',
-            apellidoPaterno: 'Pérez',
-            apellidoMaterno: 'López',
-          },
-          {
-            id: 15,
-            nombre: 'María',
-            apellidoPaterno: 'Torres',
-            apellidoMaterno: 'García',
-          },
-        ],
-        sapac: {
-          id: 2,
-          numeroCuenta: '123',
+    const {
+      service,
+      registrosRepository,
+      visitasQb,
+      usuariosRepository,
+      gruposRepository,
+      fotosQb,
+    } = createDetailService({
+      registro: baseRegistro,
+      capturistaVisita: {
+        id: 4,
+        idRegistro: 150,
+        idCapturista: 20,
+        idSupervisor: 15,
+        idGrupo: 7,
+        fechaHora: fechaVisita,
+      } as CapturistaVisita,
+      usuarios: [
+        {
+          id: 20,
           nombre: 'Juan',
-          apellidoPaterno: null,
-          apellidoMaterno: null,
-          rfc: null,
-          sector: null,
-          ruta: null,
-          folio: null,
-          idTipoServicio: 1,
-          medidor: null,
+          apellidoPaterno: 'Pérez',
+          apellidoMaterno: 'López',
+          idGrupo: 2,
         },
-        fotos: [
-          {
-            id: 10,
-            idTipoFoto: 3,
-            ruta: 'https://springtelecom.mx/registros/data/150/3/a.pdf',
-          },
-        ],
-      });
+        {
+          id: 15,
+          nombre: 'María',
+          apellidoPaterno: 'Torres',
+          apellidoMaterno: 'García',
+          idGrupo: 3,
+        },
+      ],
+      grupos: [
+        { id: 2, nombre: 'Grupo Norte' },
+        { id: 3, nombre: 'Supervisores Centro' },
+      ],
+      fotosListado: [
+        {
+          id: 21,
+          idRegistro: 150,
+          ruta: '/registros/data/foto-1.jpg',
+          fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+          idTipoFoto: 6,
+        },
+      ],
+      sapac: {
+        id: 2,
+        numeroCuenta: '123',
+        nombre: 'Juan',
+        apellidoPaterno: null,
+        apellidoMaterno: null,
+        rfc: null,
+        sector: null,
+        ruta: null,
+        folio: null,
+        idTipoServicio: 1,
+        medidor: null,
+      },
+      fotos: [
+        {
+          id: 10,
+          idTipoFoto: 3,
+          ruta: 'https://springtelecom.mx/registros/data/150/3/a.pdf',
+        },
+      ],
+    });
 
     const result = await service.findOne(150, user({ rol: 4 }));
 
@@ -690,6 +904,11 @@ describe('MonitoreoService.findOne', () => {
       'DESC',
     );
     expect(usuariosRepository.find).toHaveBeenCalled();
+    expect(gruposRepository.find).toHaveBeenCalled();
+    expect(fotosQb.andWhere).toHaveBeenCalledWith(
+      'foto.idTipoFoto IN (:...tiposFoto)',
+      { tiposFoto: [6, 7, 8] },
+    );
     expect(result.data).toEqual(
       expect.objectContaining({
         id: 150,
@@ -703,13 +922,26 @@ describe('MonitoreoService.findOne', () => {
         apellidoPaternoCapturista: 'Pérez',
         apellidoMaternoCapturista: 'López',
         nombreCompletoCapturista: 'Juan Pérez López',
+        idGrupoCapturista: 2,
+        nombreGrupoCapturista: 'Grupo Norte',
         idSupervisor: 15,
         nombreSupervisor: 'María',
         apellidoPaternoSupervisor: 'Torres',
         apellidoMaternoSupervisor: 'García',
         nombreCompletoSupervisor: 'María Torres García',
+        idGrupoSupervisor: 3,
+        nombreGrupoSupervisor: 'Supervisores Centro',
         idGrupoCapturistaVisita: 7,
         fechaHoraCapturistaVisita: fechaVisita,
+        fotos: [
+          {
+            id: 21,
+            idRegistro: 150,
+            ruta: '/registros/data/foto-1.jpg',
+            fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+            idTipoFoto: 6,
+          },
+        ],
       }),
     );
     expect(result.data).not.toHaveProperty('CapturistaVisita');
@@ -929,10 +1161,15 @@ describe('MonitoreoService.findOne', () => {
         idCapturistaVisita: null,
         idCapturista: null,
         nombreCompletoCapturista: null,
+        idGrupoCapturista: null,
+        nombreGrupoCapturista: null,
         idSupervisor: null,
         nombreCompletoSupervisor: null,
+        idGrupoSupervisor: null,
+        nombreGrupoSupervisor: null,
         idGrupoCapturistaVisita: null,
         fechaHoraCapturistaVisita: null,
+        fotos: [],
       }),
     );
     expect(result.data.Sapac).toBeNull();
@@ -1003,5 +1240,159 @@ describe('MonitoreoService.findOne', () => {
     await expect(
       service.findOne(150, user({ rol: 2, idGrupo: 99 })),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () => {
+  it('findAll: claves únicas, sin aliases y fotos sin duplicar', async () => {
+    const { service } = createListService({
+      registros: [
+        baseRegistro,
+        { ...baseRegistro, id: 151 } as Registros,
+      ],
+      visitas: [
+        {
+          id: 12,
+          idRegistro: 150,
+          idCapturista: 20,
+          idSupervisor: 15,
+          idGrupo: 7,
+          fechaHora: new Date('2026-07-16T15:00:00.000Z'),
+        },
+      ],
+      usuarios: [
+        {
+          id: 20,
+          nombre: 'Juan',
+          apellidoPaterno: 'Pérez',
+          apellidoMaterno: 'López',
+          idGrupo: 2,
+        },
+        {
+          id: 15,
+          nombre: 'María',
+          apellidoPaterno: 'Torres',
+          apellidoMaterno: 'García',
+          idGrupo: 3,
+        },
+      ],
+      grupos: [
+        { id: 2, nombre: 'Grupo Norte' },
+        { id: 3, nombre: 'Supervisores Centro' },
+      ],
+      fotos: [
+        {
+          id: 21,
+          idRegistro: 150,
+          ruta: '/a.jpg',
+          fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+          idTipoFoto: 6,
+        },
+        {
+          id: 21,
+          idRegistro: 150,
+          ruta: '/a.jpg',
+          fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+          idTipoFoto: 6,
+        },
+        {
+          id: 22,
+          idRegistro: 150,
+          ruta: '/b.jpg',
+          fechaHora: new Date('2026-07-17T10:31:00.000Z'),
+          idTipoFoto: 7,
+        },
+      ],
+    });
+
+    const result = await service.findAll(user({ rol: 4 }));
+    const ids = result.map((item) => String(item.id));
+    expect(new Set(ids).size).toBe(ids.length);
+
+    for (const item of result) {
+      assertFlatItemKeysUnique(item as unknown as Record<string, unknown>);
+    }
+
+    expect(result[0].fotos).toHaveLength(2);
+    expect(result[0].fotos.map((f) => f.id)).toEqual([21, 22]);
+  });
+
+  it('findOne: nivel superior sin aliases ni objetos anidados de relaciones', async () => {
+    const { service } = createDetailService({
+      registro: baseRegistro,
+      capturistaVisita: {
+        id: 4,
+        idRegistro: 150,
+        idCapturista: 20,
+        idSupervisor: 15,
+        idGrupo: 7,
+        fechaHora: new Date(),
+      } as CapturistaVisita,
+      usuarios: [
+        {
+          id: 20,
+          nombre: 'Juan',
+          apellidoPaterno: 'Pérez',
+          apellidoMaterno: 'López',
+          idGrupo: 2,
+        },
+        {
+          id: 15,
+          nombre: 'María',
+          apellidoPaterno: 'Torres',
+          apellidoMaterno: 'García',
+          idGrupo: 3,
+        },
+      ],
+      grupos: [
+        { id: 2, nombre: 'Grupo Norte' },
+        { id: 3, nombre: 'Supervisores Centro' },
+      ],
+      fotosListado: [
+        {
+          id: 21,
+          idRegistro: 150,
+          ruta: '/a.jpg',
+          fechaHora: new Date(),
+          idTipoFoto: 6,
+        },
+      ],
+      sapac: null,
+      catastro: null,
+      licencias: null,
+      contacto: null,
+      proteccionCivil: null,
+      contactoRepresentante: null,
+      fotos: [],
+    });
+
+    const result = await service.findOne(150, user({ rol: 4 }));
+    const data = result.data as Record<string, unknown>;
+
+    const keys = Object.keys(data);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    for (const forbidden of [
+      'Id',
+      'IdCapturista',
+      'IdSupervisor',
+      'IdGrupo',
+      'Fotos',
+      'capturista',
+      'supervisor',
+      'CapturistaVisita',
+      'idGrupo',
+    ]) {
+      expect(data).not.toHaveProperty(forbidden);
+    }
+
+    expect(data).toHaveProperty('idCapturista');
+    expect(data).toHaveProperty('nombreCompletoCapturista');
+    expect(data).toHaveProperty('idGrupoCapturista');
+    expect(data).toHaveProperty('idSupervisor');
+    expect(data).toHaveProperty('nombreCompletoSupervisor');
+    expect(data).toHaveProperty('idGrupoSupervisor');
+    expect(data).toHaveProperty('fotos');
+    expect(Array.isArray(data.fotos)).toBe(true);
   });
 });

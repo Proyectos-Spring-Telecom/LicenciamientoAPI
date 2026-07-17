@@ -13,6 +13,7 @@ import { ProteccionCivil } from 'src/entities/ProteccionCivil';
 import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
 import { Usuarios } from 'src/entities/Usuarios';
+import { Grupos } from 'src/entities/Grupos';
 import { MonitoreoController } from './monitoreo.controller';
 import { MonitoreoService } from './monitoreo.service';
 
@@ -22,6 +23,7 @@ import { MonitoreoService } from './monitoreo.service';
       Registros,
       CapturistaVisita,
       Usuarios,
+      Grupos,
       Sapac,
       Catastro,
       Licencias,

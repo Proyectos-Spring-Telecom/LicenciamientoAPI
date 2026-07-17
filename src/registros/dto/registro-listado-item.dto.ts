@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RegistroFotoResponseDto } from 'src/common/dto/registro-foto-response.dto';
 
 /**
  * Ítem plano de listados GET /registros y POST /registros/por-rango-fechas.
- * Atributos de Registros + Licencias en el mismo nivel (camelCase).
+ * Atributos de Registros + Licencias + CapturistaVisita/Usuarios/Grupos
+ * + fotos (tipos 6, 7, 8) en el mismo nivel (camelCase).
  */
 export class RegistroListadoItemDto {
   @ApiProperty({ example: 4 })
@@ -134,4 +136,64 @@ export class RegistroListadoItemDto {
     description: 'Licencias.FechaActualizacion',
   })
   fechaActualizacionLicencia: Date | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 12 })
+  idCapturistaVisita: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 4 })
+  idRegistroCapturistaVisita: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 2 })
+  idGrupoCapturistaVisita: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  fechaHoraCapturistaVisita: Date | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 15 })
+  idCapturista: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Juan' })
+  nombreCapturista: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Pérez' })
+  apellidoPaternoCapturista: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'López' })
+  apellidoMaternoCapturista: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Juan Pérez López' })
+  nombreCompletoCapturista: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 2 })
+  idGrupoCapturista: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Grupo Norte' })
+  nombreGrupoCapturista: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 8 })
+  idSupervisor: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'María' })
+  nombreSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Torres' })
+  apellidoPaternoSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'García' })
+  apellidoMaternoSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'María Torres García' })
+  nombreCompletoSupervisor: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 3 })
+  idGrupoSupervisor: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Supervisores Centro' })
+  nombreGrupoSupervisor: string | null;
+
+  @ApiProperty({
+    type: [RegistroFotoResponseDto],
+    description: 'Fotografías del registro con IdTipoFoto 6, 7 u 8.',
+  })
+  fotos: RegistroFotoResponseDto[];
 }

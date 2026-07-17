@@ -4,8 +4,11 @@ import { validate } from 'class-validator';
 import { DataSource } from 'typeorm';
 import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { CapturistaVisita } from 'src/entities/CapturistaVisita';
+import { Fotos } from 'src/entities/Fotos';
+import { Grupos } from 'src/entities/Grupos';
 import { Licencias } from 'src/entities/Licencias';
 import { Registros } from 'src/entities/Registros';
+import { Usuarios } from 'src/entities/Usuarios';
 import { GetRegistrosByDateRangeDto } from './dto/get-registros-by-date-range.dto';
 import { GetRegistrosQueryDto } from './dto/get-registros-query.dto';
 import {
@@ -50,6 +53,51 @@ function user(
   };
 }
 
+/** Claves de nivel superior sin aliases PascalCase / objetos anidados de relaciones. */
+function assertFlatItemKeysUnique(item: Record<string, unknown>) {
+  const keys = Object.keys(item);
+  expect(new Set(keys).size).toBe(keys.length);
+
+  for (const forbidden of [
+    'Id',
+    'IdRegistro',
+    'IdCapturista',
+    'IdSupervisor',
+    'IdGrupo',
+    'NombreComercial',
+    'FechaHora',
+    'Fotos',
+    'capturista',
+    'supervisor',
+    'CapturistaVisita',
+    'Licencias',
+    'licencias',
+    'grupos',
+    'imagenes',
+    'fotografias',
+    'idGrupo',
+  ]) {
+    expect(item).not.toHaveProperty(forbidden);
+  }
+
+  expect(item).toHaveProperty('fotos');
+  expect(Array.isArray(item.fotos)).toBe(true);
+  expect(item.fotos).not.toBeNull();
+
+  const fotos = item.fotos as Array<Record<string, unknown>>;
+  const idsFotos = fotos.map((foto) => String(foto.id));
+  expect(new Set(idsFotos).size).toBe(idsFotos.length);
+
+  for (const foto of fotos) {
+    const fotoKeys = Object.keys(foto);
+    expect(new Set(fotoKeys).size).toBe(fotoKeys.length);
+    expect(foto).not.toHaveProperty('Id');
+    expect(foto).not.toHaveProperty('Ruta');
+    expect(foto).not.toHaveProperty('IdTipoFoto');
+    expect(foto).not.toHaveProperty('idFoto');
+  }
+}
+
 const baseRegistro = {
   id: 25,
   registro: 'REG-00025',
@@ -70,10 +118,62 @@ const baseRegistro = {
   fechaActualizacion: new Date('2026-07-16T14:20:00.000Z'),
 } as Registros;
 
+const baseVisita = {
+  id: 12,
+  idRegistro: 25,
+  idCapturista: 15,
+  idSupervisor: 8,
+  idGrupo: 2,
+  fechaHora: new Date('2026-07-17T00:32:53.000Z'),
+} as CapturistaVisita;
+
+const baseUsuarios = [
+  {
+    id: 15,
+    nombre: 'Juan',
+    apellidoPaterno: 'Pérez',
+    apellidoMaterno: 'López',
+    idGrupo: 2,
+  },
+  {
+    id: 8,
+    nombre: 'María',
+    apellidoPaterno: 'Torres',
+    apellidoMaterno: 'García',
+    idGrupo: 3,
+  },
+] as Usuarios[];
+
+const baseGrupos = [
+  { id: 2, nombre: 'Grupo Norte' },
+  { id: 3, nombre: 'Supervisores Centro' },
+] as Grupos[];
+
+const baseFotos = [
+  {
+    id: 21,
+    idRegistro: 25,
+    ruta: '/registros/data/foto-1.jpg',
+    fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+    idTipoFoto: 6,
+  },
+  {
+    id: 22,
+    idRegistro: 25,
+    ruta: '/registros/data/foto-2.jpg',
+    fechaHora: new Date('2026-07-17T10:31:00.000Z'),
+    idTipoFoto: 7,
+  },
+] as Fotos[];
+
 function createQueryBuilderMock(options?: {
   registros?: Registros[];
   total?: number;
   licencias?: unknown[];
+  visitas?: unknown[];
+  usuarios?: unknown[];
+  grupos?: unknown[];
+  fotos?: unknown[];
 }) {
   const qb = {
     select: jest.fn().mockReturnThis(),
@@ -96,11 +196,46 @@ function createQueryBuilderMock(options?: {
     getMany: jest.fn().mockResolvedValue(options?.licencias ?? []),
   };
 
+  const visitasQb = {
+    where: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(options?.visitas ?? []),
+  };
+
+  const fotosQb = {
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
+    getMany: jest.fn().mockResolvedValue(options?.fotos ?? []),
+  };
+
+  const findUsuarios = jest
+    .fn()
+    .mockResolvedValue(options?.usuarios ?? []);
+  const findGrupos = jest.fn().mockResolvedValue(options?.grupos ?? []);
+
   const createQueryBuilder = jest.fn().mockReturnValue(qb);
   const createLicenciasQueryBuilder = jest.fn().mockReturnValue(licenciasQb);
+  const createVisitasQueryBuilder = jest.fn().mockReturnValue(visitasQb);
+  const createFotosQueryBuilder = jest.fn().mockReturnValue(fotosQb);
   const getRepository = jest.fn().mockImplementation((entity) => {
     if (entity === Licencias) {
       return { createQueryBuilder: createLicenciasQueryBuilder };
+    }
+    if (entity === CapturistaVisita) {
+      return { createQueryBuilder: createVisitasQueryBuilder };
+    }
+    if (entity === Fotos) {
+      return { createQueryBuilder: createFotosQueryBuilder };
+    }
+    if (entity === Usuarios) {
+      return { find: findUsuarios };
+    }
+    if (entity === Grupos) {
+      return { find: findGrupos };
     }
     return { createQueryBuilder };
   });
@@ -109,12 +244,19 @@ function createQueryBuilderMock(options?: {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   return {
     qb,
     licenciasQb,
+    visitasQb,
+    fotosQb,
+    findUsuarios,
+    findGrupos,
     createQueryBuilder,
     createLicenciasQueryBuilder,
+    createVisitasQueryBuilder,
+    createFotosQueryBuilder,
     getRepository,
     service,
   };
@@ -274,7 +416,7 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
     ).rejects.toThrow('No tienes permisos para consultar los registros.');
   });
 
-  it('incluye Licencias planas en data y conserva paginated', async () => {
+  it('incluye Licencias y capturista/supervisor planos en data y conserva paginated', async () => {
     const licencia = {
       id: 3,
       idRegistro: 25,
@@ -296,10 +438,22 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
       fechaActualizacion: new Date('2026-07-17T00:32:53.000Z'),
     };
 
-    const { licenciasQb, getRepository, service } = createQueryBuilderMock({
+    const {
+      licenciasQb,
+      visitasQb,
+      fotosQb,
+      findUsuarios,
+      findGrupos,
+      getRepository,
+      service,
+    } = createQueryBuilderMock({
       registros: [baseRegistro],
       total: 1,
       licencias: [licencia],
+      visitas: [baseVisita],
+      usuarios: baseUsuarios,
+      grupos: baseGrupos,
+      fotos: baseFotos,
     });
 
     const result = await service.findAllPaginated(
@@ -308,15 +462,40 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
     );
 
     expect(getRepository).toHaveBeenCalledWith(Licencias);
+    expect(getRepository).toHaveBeenCalledWith(CapturistaVisita);
+    expect(getRepository).toHaveBeenCalledWith(Usuarios);
+    expect(getRepository).toHaveBeenCalledWith(Grupos);
+    expect(getRepository).toHaveBeenCalledWith(Fotos);
     expect(licenciasQb.where).toHaveBeenCalledWith(
       'licencias.idRegistro IN (:...idsRegistro)',
       { idsRegistro: [25] },
     );
+    expect(visitasQb.where).toHaveBeenCalledWith(
+      'capturistaVisita.idRegistro IN (:...idsRegistro)',
+      { idsRegistro: [25] },
+    );
+    expect(visitasQb.orderBy).toHaveBeenCalledWith(
+      'capturistaVisita.fechaHora',
+      'DESC',
+    );
+    expect(visitasQb.addOrderBy).toHaveBeenCalledWith(
+      'capturistaVisita.id',
+      'DESC',
+    );
+    expect(fotosQb.andWhere).toHaveBeenCalledWith(
+      'foto.idTipoFoto IN (:...tiposFoto)',
+      { tiposFoto: [6, 7, 8] },
+    );
+    expect(findUsuarios).toHaveBeenCalledTimes(1);
+    expect(findGrupos).toHaveBeenCalledTimes(1);
     expect(result).toHaveProperty('data');
     expect(result).toHaveProperty('paginated');
     expect(result.paginated).toEqual({ total: 1, page: 1, lastPage: 1 });
     expect(result.data[0]).not.toHaveProperty('Licencias');
     expect(result.data[0]).not.toHaveProperty('licencias');
+    expect(result.data[0]).not.toHaveProperty('CapturistaVisita');
+    expect(result.data[0]).not.toHaveProperty('capturista');
+    expect(result.data[0]).not.toHaveProperty('supervisor');
     expect(result.data[0]).toEqual(
       expect.objectContaining({
         id: 25,
@@ -328,15 +507,59 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
         giro: 'BANCO',
         tipoLicencia: 2,
         fechaCreacionLicencia: licencia.fechaCreacion,
+        idCapturistaVisita: 12,
+        idRegistroCapturistaVisita: 25,
+        idGrupoCapturistaVisita: 2,
+        fechaHoraCapturistaVisita: baseVisita.fechaHora,
+        idCapturista: 15,
+        nombreCapturista: 'Juan',
+        apellidoPaternoCapturista: 'Pérez',
+        apellidoMaternoCapturista: 'López',
+        nombreCompletoCapturista: 'Juan Pérez López',
+        idGrupoCapturista: 2,
+        nombreGrupoCapturista: 'Grupo Norte',
+        idSupervisor: 8,
+        nombreSupervisor: 'María',
+        apellidoPaternoSupervisor: 'Torres',
+        apellidoMaternoSupervisor: 'García',
+        nombreCompletoSupervisor: 'María Torres García',
+        idGrupoSupervisor: 3,
+        nombreGrupoSupervisor: 'Supervisores Centro',
+        fotos: [
+          {
+            id: 21,
+            idRegistro: 25,
+            ruta: '/registros/data/foto-1.jpg',
+            fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+            idTipoFoto: 6,
+          },
+          {
+            id: 22,
+            idRegistro: 25,
+            ruta: '/registros/data/foto-2.jpg',
+            fechaHora: new Date('2026-07-17T10:31:00.000Z'),
+            idTipoFoto: 7,
+          },
+        ],
       }),
     );
+    expect(result.data[0]).not.toHaveProperty('passwordHash');
+    expect(result.data[0]).not.toHaveProperty('refreshToken');
+    expect(result.data[0]).not.toHaveProperty('email');
   });
 
-  it('sin Licencias rellena atributos null y no altera el total', async () => {
-    const { createLicenciasQueryBuilder, service } = createQueryBuilderMock({
+  it('sin Licencias ni visita rellena atributos null y no altera el total', async () => {
+    const {
+      createLicenciasQueryBuilder,
+      createVisitasQueryBuilder,
+      createFotosQueryBuilder,
+      service,
+    } = createQueryBuilderMock({
       registros: [baseRegistro],
       total: 5,
       licencias: [],
+      visitas: [],
+      fotos: [],
     });
 
     const result = await service.findAllPaginated(
@@ -345,6 +568,8 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
     );
 
     expect(createLicenciasQueryBuilder).toHaveBeenCalled();
+    expect(createVisitasQueryBuilder).toHaveBeenCalled();
+    expect(createFotosQueryBuilder).toHaveBeenCalled();
     expect(result.paginated?.total).toBe(5);
     expect(result.data[0]).toEqual(
       expect.objectContaining({
@@ -353,14 +578,157 @@ describe('RegistrosService.findAllPaginated — visibilidad por rol', () => {
         nombreComercial: null,
         tipoLicencia: null,
         fechaCreacionLicencia: null,
+        idCapturistaVisita: null,
+        idRegistroCapturistaVisita: null,
+        idGrupoCapturistaVisita: null,
+        fechaHoraCapturistaVisita: null,
+        idCapturista: null,
+        nombreCapturista: null,
+        apellidoPaternoCapturista: null,
+        apellidoMaternoCapturista: null,
+        nombreCompletoCapturista: null,
+        idGrupoCapturista: null,
+        nombreGrupoCapturista: null,
+        idSupervisor: null,
+        nombreSupervisor: null,
+        apellidoPaternoSupervisor: null,
+        apellidoMaternoSupervisor: null,
+        nombreCompletoSupervisor: null,
+        idGrupoSupervisor: null,
+        nombreGrupoSupervisor: null,
+        fotos: [],
       }),
     );
   });
 
-  it('no consulta Licencias si la página está vacía', async () => {
-    const { createLicenciasQueryBuilder, service } = createQueryBuilderMock();
+  it('conserva idCapturista/idSupervisor si no hay Usuarios y omite apellidoMaterno en nombre completo', async () => {
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 1,
+      visitas: [
+        {
+          ...baseVisita,
+          idSupervisor: null,
+        },
+      ],
+      usuarios: [
+        {
+          id: 15,
+          nombre: 'Juan',
+          apellidoPaterno: 'Pérez',
+          apellidoMaterno: null,
+        },
+      ],
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        idCapturista: 15,
+        nombreCapturista: 'Juan',
+        apellidoPaternoCapturista: 'Pérez',
+        apellidoMaternoCapturista: null,
+        nombreCompletoCapturista: 'Juan Pérez',
+        idSupervisor: null,
+        nombreSupervisor: null,
+        apellidoPaternoSupervisor: null,
+        apellidoMaternoSupervisor: null,
+        nombreCompletoSupervisor: null,
+      }),
+    );
+    expect(String(result.data[0].nombreCompletoCapturista)).not.toContain(
+      'null',
+    );
+  });
+
+  it('conserva ids cuando Usuarios no existe y nombre completo es null si faltan nombres', async () => {
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 1,
+      visitas: [baseVisita],
+      usuarios: [],
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        idCapturista: 15,
+        nombreCapturista: null,
+        apellidoPaternoCapturista: null,
+        apellidoMaternoCapturista: null,
+        nombreCompletoCapturista: null,
+        idSupervisor: 8,
+        nombreSupervisor: null,
+        apellidoPaternoSupervisor: null,
+        apellidoMaternoSupervisor: null,
+        nombreCompletoSupervisor: null,
+      }),
+    );
+  });
+
+  it('usa la visita más reciente cuando hay varias filas', async () => {
+    const antigua = {
+      ...baseVisita,
+      id: 10,
+      fechaHora: new Date('2026-07-10T00:00:00.000Z'),
+      idCapturista: 99,
+      idSupervisor: 88,
+    };
+    const reciente = {
+      ...baseVisita,
+      id: 20,
+      fechaHora: new Date('2026-07-17T00:32:53.000Z'),
+      idCapturista: 15,
+      idSupervisor: 8,
+    };
+
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 1,
+      visitas: [reciente, antigua],
+      usuarios: baseUsuarios,
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0]).toEqual(
+      expect.objectContaining({
+        idCapturistaVisita: 20,
+        idCapturista: 15,
+        idSupervisor: 8,
+        nombreCompletoCapturista: 'Juan Pérez López',
+        nombreCompletoSupervisor: 'María Torres García',
+      }),
+    );
+  });
+
+  it('no consulta Licencias ni visitas si la página está vacía', async () => {
+    const {
+      createLicenciasQueryBuilder,
+      createVisitasQueryBuilder,
+      createFotosQueryBuilder,
+      findUsuarios,
+      findGrupos,
+      service,
+    } = createQueryBuilderMock();
     await service.findAllPaginated({ page: 1, limit: 10 }, user({ rol: 4 }));
     expect(createLicenciasQueryBuilder).not.toHaveBeenCalled();
+    expect(createVisitasQueryBuilder).not.toHaveBeenCalled();
+    expect(createFotosQueryBuilder).not.toHaveBeenCalled();
+    expect(findUsuarios).not.toHaveBeenCalled();
+    expect(findGrupos).not.toHaveBeenCalled();
   });
 });
 
@@ -498,7 +866,7 @@ describe('RegistrosService.findByDateRange', () => {
     expect(result).not.toHaveProperty('data');
   });
 
-  it('fusiona Licencias en camelCase sin anidar', async () => {
+  it('fusiona Licencias y capturista/supervisor en camelCase sin anidar', async () => {
     const { service } = createQueryBuilderMock({
       registros: [baseRegistro],
       licencias: [
@@ -523,6 +891,10 @@ describe('RegistrosService.findByDateRange', () => {
           fechaActualizacion: new Date('2026-07-16T14:20:00.000Z'),
         },
       ],
+      visitas: [baseVisita],
+      usuarios: baseUsuarios,
+      grupos: baseGrupos,
+      fotos: baseFotos,
     });
 
     const result = await service.findByDateRange(
@@ -533,6 +905,9 @@ describe('RegistrosService.findByDateRange', () => {
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
     expect(result[0]).not.toHaveProperty('Licencias');
+    expect(result[0]).not.toHaveProperty('CapturistaVisita');
+    expect(result[0]).not.toHaveProperty('capturista');
+    expect(result[0]).not.toHaveProperty('supervisor');
     expect(result[0]).toEqual(
       expect.objectContaining({
         id: 25,
@@ -542,9 +917,108 @@ describe('RegistrosService.findByDateRange', () => {
         registroLicencia: 'LIC-25',
         nombreComercial: 'BBVA',
         tipoLicencia: 2,
+        idCapturista: 15,
+        nombreCompletoCapturista: 'Juan Pérez López',
+        idGrupoCapturista: 2,
+        nombreGrupoCapturista: 'Grupo Norte',
+        idSupervisor: 8,
+        nombreCompletoSupervisor: 'María Torres García',
+        idGrupoSupervisor: 3,
+        nombreGrupoSupervisor: 'Supervisores Centro',
+        idGrupoCapturistaVisita: 2,
+        fotos: expect.arrayContaining([
+          expect.objectContaining({ id: 21, idTipoFoto: 6 }),
+        ]),
       }),
     );
-    expect(result[0]).not.toHaveProperty('idCapturista');
-    expect(result[0]).not.toHaveProperty('idGrupo');
+    expect(result).not.toHaveProperty('data');
+  });
+});
+
+describe('Registros — unicidad de atributos (sin duplicados ni aliases)', () => {
+  it('findAllPaginated: claves únicas, registros únicos y fotos deduplicadas', async () => {
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      total: 1,
+      visitas: [baseVisita],
+      usuarios: baseUsuarios,
+      grupos: baseGrupos,
+      fotos: [
+        ...baseFotos,
+        {
+          id: 21,
+          idRegistro: 25,
+          ruta: '/registros/data/foto-1.jpg',
+          fechaHora: new Date('2026-07-17T10:30:00.000Z'),
+          idTipoFoto: 6,
+        },
+      ],
+    });
+
+    const result = await service.findAllPaginated(
+      { page: 1, limit: 10 },
+      user({ rol: 4 }),
+    );
+
+    expect(result).toHaveProperty('data');
+    expect(result).toHaveProperty('paginated');
+    expect(result.paginated?.total).toBe(1);
+
+    const ids = result.data.map((item: { id: number }) => String(item.id));
+    expect(new Set(ids).size).toBe(ids.length);
+
+    for (const item of result.data) {
+      assertFlatItemKeysUnique(item as unknown as Record<string, unknown>);
+    }
+
+    expect(result.data[0].fotos).toHaveLength(2);
+    expect(result.data[0].fotos.map((f) => f.id)).toEqual([21, 22]);
+  });
+
+  it('findByDateRange: mismas claves compartidas que Monitoreo (contrato plano)', async () => {
+    const { service } = createQueryBuilderMock({
+      registros: [baseRegistro],
+      visitas: [baseVisita],
+      usuarios: baseUsuarios,
+      grupos: baseGrupos,
+      fotos: baseFotos,
+    });
+
+    const result = await service.findByDateRange(
+      { fechaInicio: '2026-07-01', fechaFin: '2026-07-16' },
+      user({ rol: 4 }),
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).not.toHaveProperty('data');
+
+    const sharedKeys = [
+      'idCapturista',
+      'nombreCapturista',
+      'apellidoPaternoCapturista',
+      'apellidoMaternoCapturista',
+      'nombreCompletoCapturista',
+      'idGrupoCapturista',
+      'nombreGrupoCapturista',
+      'idSupervisor',
+      'nombreSupervisor',
+      'apellidoPaternoSupervisor',
+      'apellidoMaternoSupervisor',
+      'nombreCompletoSupervisor',
+      'idGrupoSupervisor',
+      'nombreGrupoSupervisor',
+      'idCapturistaVisita',
+      'idRegistroCapturistaVisita',
+      'idGrupoCapturistaVisita',
+      'fechaHoraCapturistaVisita',
+      'fotos',
+    ];
+
+    for (const item of result) {
+      assertFlatItemKeysUnique(item as unknown as Record<string, unknown>);
+      for (const key of sharedKeys) {
+        expect(item).toHaveProperty(key);
+      }
+    }
   });
 });
