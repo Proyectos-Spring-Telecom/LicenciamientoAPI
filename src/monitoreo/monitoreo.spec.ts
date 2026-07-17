@@ -1395,4 +1395,129 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     expect(data).toHaveProperty('fotos');
     expect(Array.isArray(data.fotos)).toBe(true);
   });
+
+  it('Licencias sin Contacto expone Contacto con atributos en null', async () => {
+    const { service } = createDetailService({
+      registro: { ...baseRegistro, predioObra: 0, tipoRegistro: 0 } as Registros,
+      licencias: {
+        id: 12,
+        idRegistro: 150,
+        registro: null,
+        nombreComercial: 'Comercio',
+        giro: null,
+        licenciaSuelo: null,
+        nombrePropietario: null,
+        apellidoPaternoPropietario: null,
+        apellidoMaternoPropietario: null,
+        tipoPersona: null,
+        rfc: null,
+        fechaExpedicion: null,
+        fechaRefrendo: null,
+        estacionamiento: 0,
+        tipo: null,
+        fechaHora: null,
+      } as never,
+      contacto: null,
+      sapac: null,
+      catastro: null,
+      proteccionCivil: null,
+      contactoRepresentante: null,
+      fotos: [],
+    });
+
+    const result = await service.findOne(150, user({ rol: 4 }));
+    const licencias = result.data.Licencias as Record<string, unknown>;
+
+    expect(result.data.tipoRegistro).toBe(0);
+    expect(licencias.Estacionamiento).toBe(0);
+    expect(licencias.Contacto).toEqual({
+      Id: null,
+      Nombre: null,
+      ApellidoPaterno: null,
+      ApellidoMaterno: null,
+      Telefono: null,
+      Correo: null,
+    });
+    expect(Object.keys(licencias.Contacto as object).sort()).toEqual(
+      [
+        'ApellidoMaterno',
+        'ApellidoPaterno',
+        'Correo',
+        'Id',
+        'Nombre',
+        'Telefono',
+      ].sort(),
+    );
+  });
+
+  it('LicenciaConstruccion conserva escalares null, ceros y colecciones vacías', async () => {
+    const registro = {
+      ...baseRegistro,
+      predioObra: 1,
+      tipoRegistro: 0,
+      id: 151,
+    } as Registros;
+    const { service } = createDetailService({
+      registro,
+      licenciaConstruccion: {
+        id: 9,
+        idRegistro: 151,
+        tipoSolicitudLicencia: null,
+        descripcionProyecto: null,
+        superficieTerrenoM2: null,
+        superficieTerrenoObraM2: null,
+        descripcionSistemaConstructivo: null,
+        nombrePropietario: null,
+        domicilioNotificacion: null,
+        rfc: null,
+        nombreDRO: null,
+        noRegLicenciaConstruccion: null,
+        cedulaProfesional: null,
+        fecha: null,
+        numeroExpediente: null,
+        numeroControl: null,
+        seguimientoObra: 0,
+        constanciaAlineamiento: null,
+        licenciaUsoSuelo: null,
+        planoAutorizado: null,
+        licenciaFraccionamiento: null,
+        escrituras: null,
+        factibilidadAguaPotable: null,
+        recibosPagoPredial: null,
+        recibosMunicipales: null,
+        planoArquitectonicos: null,
+        otros: null,
+      } as never,
+      corresponsables: [
+        {
+          id: 1,
+          nombreCompleto: 'Solo nombre',
+          noRegLicenciaConstruccion: null,
+          cedulaProfesional: null,
+        } as never,
+      ],
+      fotosLc: [],
+    });
+
+    const result = await service.findOne(151, user({ rol: 4 }));
+    const lc = result.data.LicenciaConstruccion as Record<string, unknown>;
+
+    expect(result.data.tipoRegistro).toBe(0);
+    expect(lc.SeguimientoObra).toBe(0);
+    expect(lc.TipoSolicitudLicencia).toBeNull();
+    expect(lc.DescripcionProyecto).toBeNull();
+    expect(lc.Corresponsables).toEqual([
+      {
+        Id: 1,
+        NombreCompleto: 'Solo nombre',
+        NoRegLicenciaConstruccion: null,
+        CedulaProfesional: null,
+      },
+    ]);
+    expect(lc.LicenciaUsoyPlano).toEqual([]);
+    expect(lc.constanciaAlineamientoyNumero).toEqual([]);
+    expect(lc.FirmaPropietario).toBeNull();
+    expect(lc.FirmaDRO).toBeNull();
+    expect(result.data).not.toHaveProperty('Sapac');
+  });
 });

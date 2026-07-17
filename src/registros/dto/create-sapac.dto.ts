@@ -112,7 +112,7 @@ export class CreateSapacDto {
   })
   @ApiPropertyOptional({
     enum: [1, 2],
-    description: 'Tipo de servicio de SAPAC. Solo acepta 1 o 2.',
+    description: 'Tipo de servicio SAPAC: 1 = SM, 2 = SP',
     example: 1,
   })
   IdTipoServicio?: number;

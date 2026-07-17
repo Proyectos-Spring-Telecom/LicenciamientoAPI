@@ -10,8 +10,7 @@ export class DashboardCardResponseDto {
 
   @ApiProperty({
     example: 20,
-    description:
-      'Cantidad de registros con estatus 1: Información Faltante.',
+    description: 'Cantidad de registros con estatus 1: Información Faltante.',
   })
   informacionFaltante: number;
 

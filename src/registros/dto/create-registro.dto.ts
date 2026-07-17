@@ -65,9 +65,10 @@ export class CreateRegistroDto {
   })
   @IsNotEmpty({ message: 'TipoRegistro es obligatorio' })
   @ApiProperty({
-    description: 'Tipo de registro (obligatorio). Solo acepta 0 o 1.',
+    description:
+      'Tipo de registro (obligatorio): 0 = Local comercial, 1 = Vivienda',
     enum: [0, 1],
-    example: 1,
+    example: 0,
   })
   TipoRegistro!: number;
 
@@ -78,7 +79,8 @@ export class CreateRegistroDto {
   })
   @IsNotEmpty({ message: 'PredioObra es obligatorio' })
   @ApiProperty({
-    description: 'Predio / obra (obligatorio). Solo acepta 0 o 1.',
+    description:
+      'Estado de construcción del predio (obligatorio): 0 = No está en construcción, 1 = En construcción',
     enum: [0, 1],
     example: 1,
   })

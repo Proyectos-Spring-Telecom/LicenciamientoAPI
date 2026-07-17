@@ -82,7 +82,7 @@ const multiBinaryFiles = {
 @Roles()
 @Controller('registros')
 export class RegistrosController {
-  constructor(private readonly registrosService: RegistrosService) { }
+  constructor(private readonly registrosService: RegistrosService) {}
 
   @Patch(':idRegistro/estatus')
   @Roles()
@@ -167,7 +167,10 @@ No se aceptan \`idRol\`, \`idGrupo\` ni \`idUsuario\` por query.
     description:
       'Lista paginada (data + paginated). Cada ítem incluye Licencias, capturista/supervisor/grupos y fotos 6/7/8 (nullable / arreglo).',
   })
-  @ApiResponse({ status: 400, description: 'Parámetros de paginación inválidos' })
+  @ApiResponse({
+    status: 400,
+    description: 'Parámetros de paginación inválidos',
+  })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({
     status: 403,
@@ -335,11 +338,14 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
         TipoRegistro: {
           type: 'integer',
           enum: [0, 1],
-          example: 1,
+          description: 'Tipo de registro: 0 = Local comercial, 1 = Vivienda',
+          example: 0,
         },
         PredioObra: {
           type: 'integer',
           enum: [0, 1],
+          description:
+            'Estado de construcción del predio: 0 = No está en construcción, 1 = En construcción',
           example: 0,
         },
         EntidadFederativa: { type: 'string', nullable: true },
@@ -386,7 +392,7 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           type: 'integer',
           enum: [1, 2],
           nullable: true,
-          description: 'Tipo de servicio de SAPAC. Solo acepta 1 o 2.',
+          description: 'Tipo de servicio SAPAC: 1 = SM, 2 = SP',
           example: 1,
         },
         'Sapac.Medidor': {
@@ -481,7 +487,8 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           enum: [1, 2],
           nullable: true,
           example: 1,
-          description: 'Tipo de persona: 1 = Persona física, 2 = Persona moral.',
+          description:
+            'Tipo de persona: 1 = Persona física, 2 = Persona moral.',
         },
         'Licencias.RFC': {
           type: 'string',
@@ -530,7 +537,13 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           maxLength: 50,
           nullable: true,
         },
-        'ProteccionCivil.EsEmpresa': binaryTiny,
+        'ProteccionCivil.EsEmpresa': {
+          type: 'integer',
+          enum: [1, 2],
+          nullable: true,
+          description: 'Tipo de persona: 1 = Persona física, 2 = Persona moral',
+          example: 1,
+        },
         'ProteccionCivil.RazonSocial': {
           type: 'string',
           maxLength: 191,
@@ -566,7 +579,14 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           maxLength: 20,
           nullable: true,
         },
-        'ProteccionCivil.TienePrograma': binaryTiny,
+        'ProteccionCivil.TienePrograma': {
+          type: 'integer',
+          enum: [0, 1],
+          nullable: true,
+          description:
+            'Indica si cuenta con programa de Protección Civil: 0 = No tiene, 1 = Sí tiene',
+          example: 1,
+        },
         'ProteccionCivil.ContactoRepresentante.Nombre': {
           type: 'string',
           maxLength: 100,
@@ -624,7 +644,11 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
         },
         'LicenciaConstruccion.TipoSolicitudLicencia': {
           type: 'integer',
+          enum: [1, 2, 3, 4],
           nullable: true,
+          description:
+            'Tipo de solicitud de licencia: 1 = Obra nueva, 2 = Licencia sencilla, 3 = Regularización y/o aprobación, cambio de uso, 4 = Otros, canalización vía pública',
+          example: 1,
         },
         'LicenciaConstruccion.DescripcionProyecto': {
           type: 'string',

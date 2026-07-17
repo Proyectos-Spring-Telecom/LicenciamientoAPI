@@ -32,12 +32,21 @@ function toOptionalBinaryFlag({ value }: { value: unknown }): unknown {
   return value;
 }
 
-function toOptionalInt({ value }: { value: unknown }): unknown {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (typeof value === 'number' && Number.isInteger(value)) return value;
-  if (typeof value === 'string' && /^-?\d+$/.test(value.trim())) {
-    return parseInt(value.trim(), 10);
+/** Catálogo 1–4. No convierte boolean ni texto libre. */
+function toOptionalTipoSolicitudLicencia({
+  value,
+}: {
+  value: unknown;
+}): unknown {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
   }
+
+  if (value === '1' || value === 1) return 1;
+  if (value === '2' || value === 2) return 2;
+  if (value === '3' || value === 3) return 3;
+  if (value === '4' || value === 4) return 4;
+
   return value;
 }
 
@@ -53,10 +62,18 @@ function toOptionalDecimal({ value }: { value: unknown }): unknown {
  * Las firmas NO van aquí: se reciben como archivos multipart.
  */
 export class CreateLicenciaConstruccionDto {
-  @Transform(toOptionalInt)
+  @Transform(toOptionalTipoSolicitudLicencia)
   @IsOptional()
   @IsInt({ message: 'TipoSolicitudLicencia debe ser un entero' })
-  @ApiPropertyOptional({ example: 1 })
+  @IsIn([1, 2, 3, 4], {
+    message: 'LicenciaConstruccion.TipoSolicitudLicencia debe ser 1, 2, 3 o 4',
+  })
+  @ApiPropertyOptional({
+    enum: [1, 2, 3, 4],
+    example: 1,
+    description:
+      'Tipo de solicitud de licencia: 1 = Obra nueva, 2 = Licencia sencilla, 3 = Regularización y/o aprobación, cambio de uso, 4 = Otros, canalización vía pública',
+  })
   TipoSolicitudLicencia?: number;
 
   @Transform(emptyToNull)
@@ -165,7 +182,9 @@ export class CreateLicenciaConstruccionDto {
   @Transform(toOptionalBinaryFlag)
   @IsOptional()
   @IsInt({ message: 'SeguimientoObra debe ser un entero' })
-  @IsIn([0, 1], { message: 'SeguimientoObra solo puede tener los valores 0 o 1' })
+  @IsIn([0, 1], {
+    message: 'SeguimientoObra solo puede tener los valores 0 o 1',
+  })
   @ApiPropertyOptional({ enum: [0, 1] })
   SeguimientoObra?: number;
 

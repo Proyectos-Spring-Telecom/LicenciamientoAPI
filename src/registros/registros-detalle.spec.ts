@@ -193,6 +193,49 @@ describe('RegistrosService.findOne — detalle por idRegistro', () => {
     expect(result.data.fotos).not.toBeNull();
   });
 
+  it('propaga detalle con Contacto en null y ceros válidos', async () => {
+    const findOne = jest.fn().mockResolvedValue({
+      data: {
+        id: 25,
+        tipoRegistro: 0,
+        predioObra: 0,
+        fotos: [],
+        Sapac: null,
+        Catastro: null,
+        Licencias: {
+          Id: 12,
+          NombreComercial: 'Comercio',
+          Estacionamiento: 0,
+          Contacto: {
+            Id: null,
+            Nombre: null,
+            ApellidoPaterno: null,
+            ApellidoMaterno: null,
+            Telefono: null,
+            Correo: null,
+          },
+        },
+        ProteccionCivil: null,
+      },
+    });
+    const { service } = createService(findOne);
+
+    const result = await service.findOne(25, user({ rol: 4 }));
+    const data = result.data as Record<string, unknown>;
+    const licencias = data.Licencias as Record<string, unknown>;
+
+    expect(data.tipoRegistro).toBe(0);
+    expect(licencias.Estacionamiento).toBe(0);
+    expect(licencias.Contacto).toEqual({
+      Id: null,
+      Nombre: null,
+      ApellidoPaterno: null,
+      ApellidoMaterno: null,
+      Telefono: null,
+      Correo: null,
+    });
+  });
+
   it('claves del data sin aliases duplicados en nivel superior plano', async () => {
     const findOne = jest.fn().mockResolvedValue({
       data: {
