@@ -82,7 +82,7 @@ const multiBinaryFiles = {
 @Roles()
 @Controller('registros')
 export class RegistrosController {
-  constructor(private readonly registrosService: RegistrosService) {}
+  constructor(private readonly registrosService: RegistrosService) { }
 
   @Patch(':idRegistro/estatus')
   @Roles()
