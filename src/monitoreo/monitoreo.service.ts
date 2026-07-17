@@ -744,9 +744,9 @@ export class MonitoreoService {
         ...this.mapLicenciaConstruccionScalars(licenciaConstruccion),
         Corresponsables: corresponsables.map((item) => ({
           Id: Number(item.id),
-          NombreCompleto: item.nombreCompleto,
-          NoRegLicenciaConstruccion: item.noRegLicenciaConstruccion,
-          CedulaProfesional: item.cedulaProfesional,
+          NombreCompleto: item.nombreCompleto ?? null,
+          NoRegLicenciaConstruccion: item.noRegLicenciaConstruccion ?? null,
+          CedulaProfesional: item.cedulaProfesional ?? null,
         })),
         ...this.mapLcDocumentos(fotosByTipo),
         ...this.mapLcFirmas(fotosByTipo),
@@ -893,7 +893,7 @@ export class MonitoreoService {
     }
 
     return {
-      Id: sapac ? Number(sapac.id) : null,
+      Id: sapac != null ? Number(sapac.id) : null,
       NumeroCuenta: sapac?.numeroCuenta ?? null,
       Nombre: sapac?.nombre ?? null,
       ApellidoPaterno: sapac?.apellidoPaterno ?? null,
@@ -922,7 +922,7 @@ export class MonitoreoService {
     }
 
     return {
-      Id: catastro ? Number(catastro.id) : null,
+      Id: catastro != null ? Number(catastro.id) : null,
       Clave: catastro?.clave ?? null,
       M2: catastro?.m2 ?? null,
       Superficie: catastro?.superficie ?? null,
@@ -958,14 +958,16 @@ export class MonitoreoService {
     }
 
     return {
-      Id: licencias ? Number(licencias.id) : null,
+      Id: licencias != null ? Number(licencias.id) : null,
       Registro: licencias?.registro ?? null,
       NombreComercial: licencias?.nombreComercial ?? null,
       Giro: licencias?.giro ?? null,
       LicenciaSuelo: licencias?.licenciaSuelo ?? null,
       NombrePropietario: licencias?.nombrePropietario ?? null,
-      ApellidoPaternoPropietario: licencias?.apellidoPaternoPropietario ?? null,
-      ApellidoMaternoPropietario: licencias?.apellidoMaternoPropietario ?? null,
+      ApellidoPaternoPropietario:
+        licencias?.apellidoPaternoPropietario ?? null,
+      ApellidoMaternoPropietario:
+        licencias?.apellidoMaternoPropietario ?? null,
       TipoPersona: licencias?.tipoPersona ?? null,
       RFC: licencias?.rfc ?? null,
       FechaExpedicion: licencias?.fechaExpedicion ?? null,
@@ -979,14 +981,13 @@ export class MonitoreoService {
   }
 
   private mapContacto(contacto: Contactos | null) {
-    if (!contacto) return null;
     return {
-      Id: Number(contacto.id),
-      Nombre: contacto.nombre,
-      ApellidoPaterno: contacto.apellidoPaterno,
-      ApellidoMaterno: contacto.apellidoMaterno,
-      Telefono: contacto.telefono,
-      Correo: contacto.correo,
+      Id: contacto != null ? Number(contacto.id) : null,
+      Nombre: contacto?.nombre ?? null,
+      ApellidoPaterno: contacto?.apellidoPaterno ?? null,
+      ApellidoMaterno: contacto?.apellidoMaterno ?? null,
+      Telefono: contacto?.telefono ?? null,
+      Correo: contacto?.correo ?? null,
     };
   }
 
@@ -1005,7 +1006,7 @@ export class MonitoreoService {
     }
 
     return {
-      Id: pc ? Number(pc.id) : null,
+      Id: pc != null ? Number(pc.id) : null,
       EsEmpresa: pc?.esEmpresa ?? null,
       RazonSocial: pc?.razonSocial ?? null,
       RFC: pc?.rfc ?? null,
@@ -1023,45 +1024,45 @@ export class MonitoreoService {
   private mapContactoRepresentante(
     contacto: ContactoRepresentante | null,
   ) {
-    if (!contacto) return null;
     return {
-      Id: Number(contacto.id),
-      Nombre: contacto.nombre,
-      ApellidoPaterno: contacto.apellidoPaterno,
-      ApellidoMaterno: contacto.apellidoMaterno,
-      Telefono: contacto.telefono,
-      Correo: contacto.correo,
+      Id: contacto != null ? Number(contacto.id) : null,
+      Nombre: contacto?.nombre ?? null,
+      ApellidoPaterno: contacto?.apellidoPaterno ?? null,
+      ApellidoMaterno: contacto?.apellidoMaterno ?? null,
+      Telefono: contacto?.telefono ?? null,
+      Correo: contacto?.correo ?? null,
     };
   }
 
   private mapLicenciaConstruccionScalars(lc: LicenciaConstruccion) {
     return {
       Id: Number(lc.id),
-      TipoSolicitudLicencia: lc.tipoSolicitudLicencia,
-      DescripcionProyecto: lc.descripcionProyecto,
-      SuperficieTerrenoM2: lc.superficieTerrenoM2,
-      SuperficieTerrenoObraM2: lc.superficieTerrenoObraM2,
-      DescripcionSistemaConstructivo: lc.descripcionSistemaConstructivo,
-      NombrePropietario: lc.nombrePropietario,
-      DomicilioNotificacion: lc.domicilioNotificacion,
-      RFC: lc.rfc,
-      NombreDRO: lc.nombreDRO,
-      NoRegLicenciaConstruccion: lc.noRegLicenciaConstruccion,
-      CedulaProfesional: lc.cedulaProfesional,
-      Fecha: lc.fecha,
-      NumeroExpediente: lc.numeroExpediente,
-      NumeroControl: lc.numeroControl,
-      SeguimientoObra: lc.seguimientoObra,
-      ConstanciaAlineamiento: lc.constanciaAlineamiento,
-      LicenciaUsoSuelo: lc.licenciaUsoSuelo,
-      PlanoAutorizado: lc.planoAutorizado,
-      LicenciaFraccionamiento: lc.licenciaFraccionamiento,
-      Escrituras: lc.escrituras,
-      FactibilidadAguaPotable: lc.factibilidadAguaPotable,
-      RecibosPagoPredial: lc.recibosPagoPredial,
-      RecibosMunicipales: lc.recibosMunicipales,
-      PlanoArquitectonicos: lc.planoArquitectonicos,
-      Otros: lc.otros,
+      TipoSolicitudLicencia: lc.tipoSolicitudLicencia ?? null,
+      DescripcionProyecto: lc.descripcionProyecto ?? null,
+      SuperficieTerrenoM2: lc.superficieTerrenoM2 ?? null,
+      SuperficieTerrenoObraM2: lc.superficieTerrenoObraM2 ?? null,
+      DescripcionSistemaConstructivo:
+        lc.descripcionSistemaConstructivo ?? null,
+      NombrePropietario: lc.nombrePropietario ?? null,
+      DomicilioNotificacion: lc.domicilioNotificacion ?? null,
+      RFC: lc.rfc ?? null,
+      NombreDRO: lc.nombreDRO ?? null,
+      NoRegLicenciaConstruccion: lc.noRegLicenciaConstruccion ?? null,
+      CedulaProfesional: lc.cedulaProfesional ?? null,
+      Fecha: lc.fecha ?? null,
+      NumeroExpediente: lc.numeroExpediente ?? null,
+      NumeroControl: lc.numeroControl ?? null,
+      SeguimientoObra: lc.seguimientoObra ?? null,
+      ConstanciaAlineamiento: lc.constanciaAlineamiento ?? null,
+      LicenciaUsoSuelo: lc.licenciaUsoSuelo ?? null,
+      PlanoAutorizado: lc.planoAutorizado ?? null,
+      LicenciaFraccionamiento: lc.licenciaFraccionamiento ?? null,
+      Escrituras: lc.escrituras ?? null,
+      FactibilidadAguaPotable: lc.factibilidadAguaPotable ?? null,
+      RecibosPagoPredial: lc.recibosPagoPredial ?? null,
+      RecibosMunicipales: lc.recibosMunicipales ?? null,
+      PlanoArquitectonicos: lc.planoArquitectonicos ?? null,
+      Otros: lc.otros ?? null,
     };
   }
 

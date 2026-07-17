@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
-import { DashboardCapturaPeriodoDto } from './dto/dashboard-captura-periodo.dto';
 import { DashboardEstadisticaOperativaDto } from './dto/dashboard-estadistica-operativa.dto';
-import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { DashboardRegistroCapturistaDto } from './dto/dashboard-registro-capturista.dto';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
 
@@ -55,19 +53,16 @@ export class DashboardService {
   constructor(private readonly dataSource: DataSource) {}
 
   /**
-   * Conteos globales, estadística mensual, estado diario, periodo opcional
+   * Conteos globales, estadística mensual, estado diario
    * y registros agrupados por capturista (visita vigente).
    */
-  async getCard(
-    filters: DashboardFilterDto = {},
-  ): Promise<DashboardResponseDto> {
+  async getCard(): Promise<DashboardResponseDto> {
     try {
       const [
         cardRows,
         estadisticaRows,
         estadoActualRows,
         registrosCapturistasRows,
-        capturaPeriodo,
       ] = await Promise.all([
         this.dataSource.query(this.getCardQuery()) as Promise<CardRawRow[]>,
         this.dataSource.query(this.getEstadisticaOperativaQuery()) as Promise<
@@ -79,7 +74,6 @@ export class DashboardService {
         this.dataSource.query(this.getRegistrosCapturistasQuery()) as Promise<
           DashboardRegistroCapturistaRaw[]
         >,
-        this.getCapturaPeriodo(filters ?? {}),
       ]);
 
       return {
@@ -88,7 +82,6 @@ export class DashboardService {
           estadisticaRows ?? [],
         ),
         estadoActual: this.mapEstadoActual(estadoActualRows?.[0]),
-        capturaPeriodo,
         registrosCapturistas: this.mapRegistrosCapturistas(
           registrosCapturistasRows ?? [],
         ),
@@ -186,89 +179,6 @@ export class DashboardService {
         totalRegistros: Number(row?.totalRegistros ?? 0),
       };
     });
-  }
-
-  private async getCapturaPeriodo(
-    filters: DashboardFilterDto,
-  ): Promise<DashboardCapturaPeriodoDto | null> {
-    const { fechaInicial, fechaFinal, idGrupo, idCapturista } = filters;
-
-    if (!fechaInicial || !fechaFinal || fechaFinal < fechaInicial) {
-      return null;
-    }
-
-    const filtraVisita = idGrupo !== undefined || idCapturista !== undefined;
-    const condiciones = [
-      'r.FechaCreacion >= ?',
-      'r.FechaCreacion < DATE_ADD(?, INTERVAL 1 DAY)',
-    ];
-    const parametros: Array<string | number> = [fechaInicial, fechaFinal];
-
-    if (idGrupo !== undefined) {
-      condiciones.push('cv.IdGrupo = ?');
-      parametros.push(idGrupo);
-    }
-
-    if (idCapturista !== undefined) {
-      condiciones.push('cv.IdCapturista = ?');
-      parametros.push(idCapturista);
-    }
-
-    const joinVisitaVigente = filtraVisita
-      ? `
-        INNER JOIN (
-          SELECT
-            visita.IdRegistro,
-            visita.IdGrupo,
-            visita.IdCapturista,
-            ROW_NUMBER() OVER (
-              PARTITION BY visita.IdRegistro
-              ORDER BY visita.FechaHora DESC, visita.Id DESC
-            ) AS numeroFila
-          FROM CapturistaVisita visita
-        ) cv
-          ON cv.IdRegistro = r.Id
-         AND cv.numeroFila = 1
-      `
-      : '';
-
-    const totalExpression = filtraVisita ? 'COUNT(DISTINCT r.Id)' : 'COUNT(*)';
-    const statusExpression = (estatus: number) =>
-      filtraVisita
-        ? `COUNT(DISTINCT CASE WHEN r.Estatus = ${estatus} THEN r.Id END)`
-        : `COALESCE(SUM(CASE WHEN r.Estatus = ${estatus} THEN 1 ELSE 0 END), 0)`;
-
-    const query = `
-      SELECT
-        ${totalExpression} AS totalRegistros,
-        ${statusExpression(1)} AS informacionFaltante,
-        ${statusExpression(2)} AS rechazoSinRespuesta,
-        ${statusExpression(3)} AS datosCorrectos,
-        ${statusExpression(4)} AS revision,
-        ${statusExpression(5)} AS baja
-      FROM Registros r
-      ${joinVisitaVigente}
-      WHERE ${condiciones.join(' AND ')}
-    `;
-
-    const rows = (await this.dataSource.query(
-      query,
-      parametros,
-    )) as CardRawRow[];
-    const row = rows?.[0];
-
-    return {
-      fechaInicial,
-      fechaFinal,
-      idGrupo: idGrupo ?? null,
-      idCapturista: idCapturista ?? null,
-      totalRegistros: Number(row?.totalRegistros ?? 0),
-      informacionFaltante: Number(row?.informacionFaltante ?? 0),
-      rechazoSinRespuesta: Number(row?.rechazoSinRespuesta ?? 0),
-      datosCorrectos: Number(row?.datosCorrectos ?? 0),
-      revision: Number(row?.revision ?? 0),
-      baja: Number(row?.baja ?? 0),
-    };
   }
 
   private getCardQuery(): string {

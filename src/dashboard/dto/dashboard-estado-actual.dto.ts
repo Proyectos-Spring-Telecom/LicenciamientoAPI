@@ -22,8 +22,7 @@ export class DashboardEstadoActualDto {
 
   @ApiProperty({
     example: 2,
-    description:
-      'Registros del día con estatus 2: Rechazo o Sin respuesta.',
+    description: 'Registros del día con estatus 2: Rechazo o Sin respuesta.',
   })
   rechazoSinRespuesta: number;
 

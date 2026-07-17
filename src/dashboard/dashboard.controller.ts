@@ -11,8 +11,10 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { DashboardService } from './dashboard.service';
-import { DashboardFilterDto } from './dto/dashboard-filter.dto';
+import { CapturaPeriodoRequestDto } from './dto/captura-periodo-request.dto';
+import { CapturaPeriodoResponseDto } from './dto/captura-periodo-response.dto';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
+import { CapturaPeriodoService } from './services/captura-periodo.service';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('bearer-token')
@@ -20,7 +22,10 @@ import { DashboardResponseDto } from './dto/dashboard-response.dto';
 @Roles()
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) { }
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly capturaPeriodoService: CapturaPeriodoService,
+  ) {}
 
   @Post('card')
   @HttpCode(200)
@@ -46,28 +51,48 @@ creados hoy, usando el rango \`CURDATE()\` hasta el inicio del día siguiente.
 \`registrosCapturistas\` agrupa la cantidad de registros por capturista según la
 visita vigente de \`CapturistaVisita\`, desde el primer registro hasta la fecha actual.
 
-Opcionalmente acepta \`fechaInicial\`, \`fechaFinal\`, \`idGrupo\` e
-\`idCapturista\`. \`capturaPeriodo\` solo se calcula cuando existen ambas fechas.
 Utiliza consultas SQL agregadas, sin consultas por mes ni por estatus.
+La captura por periodo se consulta en \`POST /dashboard/captura-periodo\`.
 `,
-  })
-  @ApiBody({
-    type: DashboardFilterDto,
-    required: false,
-    description:
-      'Filtros opcionales para capturaPeriodo. Las fechas deben enviarse juntas.',
   })
   @ApiOkResponse({
     description:
-      'Conteos globales, estadística mensual, estado actual, captura del periodo y registros por capturista.',
+      'Conteos globales, estadística mensual, estado actual y registros por capturista.',
     type: DashboardResponseDto,
   })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 403, description: 'Acceso denegado' })
-  getCard(
-    @Body() filters: DashboardFilterDto = {},
-  ): Promise<DashboardResponseDto> {
-    return this.dashboardService.getCard(filters);
+  getCard(): Promise<DashboardResponseDto> {
+    return this.dashboardService.getCard();
   }
 
+  @Post('captura-periodo')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Consulta la captura de registros por día dentro de un periodo',
+    description: `
+Devuelve el total general de registros por día y el desglose diario por estatus
+(\`1\` Información faltante, \`2\` Rechazo o sin respuesta, \`3\` Datos correctos,
+\`4\` Revisión, \`5\` Baja).
+
+Las fechas \`fechaInicial\` y \`fechaFinal\` son inclusivas (\`YYYY-MM-DD\`).
+Opcionalmente acepta \`idGrupo\` e \`idCapturista\` sobre la visita vigente.
+`,
+  })
+  @ApiBody({ type: CapturaPeriodoRequestDto })
+  @ApiOkResponse({
+    description: 'Totales diarios y desglose de registros por estatus',
+    type: CapturaPeriodoResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Fechas inválidas o fecha inicial posterior a la fecha final',
+  })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso denegado' })
+  obtenerCapturaPeriodo(
+    @Body() dto: CapturaPeriodoRequestDto,
+  ): Promise<CapturaPeriodoResponseDto> {
+    return this.capturaPeriodoService.obtenerCapturaPeriodo(dto);
+  }
 }

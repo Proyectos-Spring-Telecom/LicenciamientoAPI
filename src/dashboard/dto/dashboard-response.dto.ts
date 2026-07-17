@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { DashboardCardResponseDto } from './dashboard-card-response.dto';
-import { DashboardCapturaPeriodoDto } from './dashboard-captura-periodo.dto';
 import { DashboardEstadisticaOperativaDto } from './dashboard-estadistica-operativa.dto';
 import { DashboardEstadoActualDto } from './dashboard-estado-actual.dto';
 import { DashboardRegistroCapturistaDto } from './dashboard-registro-capturista.dto';
@@ -64,26 +63,6 @@ export class DashboardResponseDto {
     },
   })
   estadoActual: DashboardEstadoActualDto;
-
-  @ApiProperty({
-    type: DashboardCapturaPeriodoDto,
-    nullable: true,
-    description:
-      'Conteos del periodo solicitado. Es null cuando no se envían ambas fechas o el rango es inverso.',
-    example: {
-      fechaInicial: '2026-07-01',
-      fechaFinal: '2026-07-16',
-      idGrupo: 3,
-      idCapturista: 25,
-      totalRegistros: 48,
-      informacionFaltante: 8,
-      rechazoSinRespuesta: 4,
-      datosCorrectos: 25,
-      revision: 9,
-      baja: 2,
-    },
-  })
-  capturaPeriodo: DashboardCapturaPeriodoDto | null;
 
   @ApiProperty({
     type: [DashboardRegistroCapturistaDto],
