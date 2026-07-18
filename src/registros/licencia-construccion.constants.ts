@@ -48,6 +48,42 @@ export const LC_FILE_FORM_TO_KEY: Record<string, LcFileKey> =
   );
 
 /**
+ * Salida nominal de fotos de LicenciaConstruccion en los GET de detalle
+ * (GET /registros/:idRegistro y GET /monitoreo/:idRegistro).
+ * Derivado de LC_FILE_TIPO_FOTO (fuente única de IdTipoFoto).
+ *
+ * licenciaUsoSuelo, planoAutorizado y licenciaFraccionamiento se exponen en
+ * camelCase porque los nombres PascalCase ya pertenecen a los indicadores
+ * tinyint de la tabla LicenciaConstruccion en la misma respuesta (misma
+ * convención dato/archivo que Estacionamiento/estacionamiento en Licencias).
+ */
+export const LC_RESPONSE_PHOTO_MAP = {
+  constanciaAlineamiento: LC_FILE_TIPO_FOTO.constanciaAlineamiento,
+  constanciaNumero: LC_FILE_TIPO_FOTO.constanciaNumero,
+  licenciaUsoSuelo: LC_FILE_TIPO_FOTO.LicenciaUsoSuelo,
+  planoAutorizado: LC_FILE_TIPO_FOTO.PlanoAutorizado,
+  licenciaFraccionamiento: LC_FILE_TIPO_FOTO.LicenciaFraccionamiento,
+  ConstanciaPropietario: LC_FILE_TIPO_FOTO.ConstanciaPropietario,
+  Factibilidad: LC_FILE_TIPO_FOTO.Factibilidad,
+  RecibosImpuestoPredial: LC_FILE_TIPO_FOTO.RecibosImpuestoPredial,
+  JuegoDePlanosArquitectonicos1: LC_FILE_TIPO_FOTO.JuegoDePlanosArquitectonicos1,
+  JuegoDePlanosArquitectonicos2: LC_FILE_TIPO_FOTO.JuegoDePlanosArquitectonicos2,
+  JuegoDePlanosArquitectonicos3: LC_FILE_TIPO_FOTO.JuegoDePlanosArquitectonicos3,
+  otros: LC_FILE_TIPO_FOTO.otros,
+  FirmaPropietario: LC_FILE_TIPO_FOTO.FirmaPropietario,
+  FirmaDRO: LC_FILE_TIPO_FOTO.FirmaDRO,
+  FirmaCorresponsable: LC_FILE_TIPO_FOTO.FirmaCorresponsable,
+  FirmaResponsableRecepcionDocumento:
+    LC_FILE_TIPO_FOTO.FirmaResponsableRecepcionDocumento,
+} as const;
+
+export type LcResponsePhotoKey = keyof typeof LC_RESPONSE_PHOTO_MAP;
+
+export const LC_RESPONSE_PHOTO_KEYS = Object.keys(
+  LC_RESPONSE_PHOTO_MAP,
+) as LcResponsePhotoKey[];
+
+/**
  * Firmas de LicenciaConstruccion → IdTipoFoto fijo (no lo envía el cliente).
  * Uso exclusivo de PATCH /registros_actualizar (el POST usa LC_FILE_TIPO_FOTO).
  */

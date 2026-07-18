@@ -26,8 +26,9 @@ import { Sapac } from 'src/entities/Sapac';
 import { Usuarios } from 'src/entities/Usuarios';
 import { CATASTRO_TIPO_FOTO } from 'src/registros/catastro.constants';
 import {
-  FIRMA_TIPO_FOTO,
-  LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
+  LC_RESPONSE_PHOTO_KEYS,
+  LC_RESPONSE_PHOTO_MAP,
+  LcResponsePhotoKey,
 } from 'src/registros/licencia-construccion.constants';
 import { LICENCIAS_TIPO_FOTO } from 'src/registros/licencias.constants';
 import { PROTECCION_CIVIL_TIPO_FOTO } from 'src/registros/proteccion-civil.constants';
@@ -695,7 +696,7 @@ export class MonitoreoService {
       }),
       this.fotosRepository.find({
         where: { idRegistro },
-        order: { id: 'ASC' },
+        order: { idTipoFoto: 'ASC', id: 'DESC' },
       }),
     ]);
 
@@ -733,7 +734,7 @@ export class MonitoreoService {
       }),
       this.fotosLicenciaConstruccionRepository.find({
         where: { idLicenciaConstruccion },
-        order: { id: 'ASC' },
+        order: { idTipoFoto: 'ASC', id: 'DESC' },
       }),
     ]);
 
@@ -748,8 +749,7 @@ export class MonitoreoService {
           NoRegLicenciaConstruccion: item.noRegLicenciaConstruccion ?? null,
           CedulaProfesional: item.cedulaProfesional ?? null,
         })),
-        ...this.mapLcDocumentos(fotosByTipo),
-        ...this.mapLcFirmas(fotosByTipo),
+        ...this.mapLcFotos(fotosByTipo),
       },
     };
   }
@@ -775,7 +775,11 @@ export class MonitoreoService {
     return map;
   }
 
-  /** Archivo único: primera ruta por Id ASC, o null. */
+  /**
+   * Archivo único por tipo, o null si no existe.
+   * Ante duplicados históricos toma la fila de Id mayor (las consultas de
+   * fotos ordenan Id DESC dentro de cada tipo); no se modifica la BD.
+   */
   private singleFotoUrl(
     fotosByTipo: Map<number, FotoRow[]>,
     idTipoFoto: number,
@@ -783,17 +787,6 @@ export class MonitoreoService {
     const rows = fotosByTipo.get(idTipoFoto);
     if (!rows?.length) return null;
     return rows[0].ruta ?? null;
-  }
-
-  /** Archivos múltiples: arreglo de rutas (puede ser vacío). */
-  private multiFotoUrls(
-    fotosByTipo: Map<number, FotoRow[]>,
-    idTipoFoto: number,
-  ): string[] {
-    const rows = fotosByTipo.get(idTipoFoto) ?? [];
-    return rows
-      .map((row) => row.ruta)
-      .filter((ruta): ruta is string => ruta != null && ruta !== '');
   }
 
   private mapRegistroDetail(registro: Registros) {
@@ -1066,20 +1059,19 @@ export class MonitoreoService {
     };
   }
 
-  private mapLcDocumentos(fotosByTipo: Map<number, FotoRow[]>) {
-    const result: Record<string, string[]> = {};
-    for (const [key, idTipoFoto] of Object.entries(
-      LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
-    )) {
-      result[key] = this.multiFotoUrls(fotosByTipo, idTipoFoto);
-    }
-    return result;
-  }
-
-  private mapLcFirmas(fotosByTipo: Map<number, FotoRow[]>) {
-    const result: Record<string, string | null> = {};
-    for (const [key, idTipoFoto] of Object.entries(FIRMA_TIPO_FOTO)) {
-      result[key] = this.singleFotoUrl(fotosByTipo, idTipoFoto);
+  /**
+   * Fotos nominales de LicenciaConstruccion (una URL o null por IdTipoFoto),
+   * según LC_RESPONSE_PHOTO_MAP. Todas las propiedades siempre presentes.
+   */
+  private mapLcFotos(
+    fotosByTipo: Map<number, FotoRow[]>,
+  ): Record<LcResponsePhotoKey, string | null> {
+    const result = {} as Record<LcResponsePhotoKey, string | null>;
+    for (const key of LC_RESPONSE_PHOTO_KEYS) {
+      result[key] = this.singleFotoUrl(
+        fotosByTipo,
+        LC_RESPONSE_PHOTO_MAP[key],
+      );
     }
     return result;
   }

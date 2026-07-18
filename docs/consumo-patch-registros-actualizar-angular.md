@@ -2,7 +2,7 @@
 
 Guía práctica para actualizar parcialmente un registro desde Angular con `multipart/form-data`.
 
-Relacionado: [Consumir `POST /registros`](./consumo-post-registros-angular.md) (creación).
+Contrato completo: [contratos.md](./contratos.md) · Contexto: [contexto.md](./contexto.md) · POST: [consumo-post-registros-angular.md](./consumo-post-registros-angular.md)
 
 ## Endpoint
 
@@ -20,24 +20,22 @@ Respuesta exitosa: **HTTP 200**
 
 1. **No envíes JSON.** Todo va en `FormData` con campos planos.
 2. **`idRegistro` es obligatorio** (en el body, no en la URL).
-3. Las secciones usan **notación con puntos**, igual que el POST:
-   - `Sapac.NumeroCuenta`
-   - `Licencias.Contacto.Nombre`
-   - `LicenciaConstruccion.Corresponsables[0].Id`
-4. **No envíes `Estatus`.** El estatus solo cambia con `PATCH /registros/:idRegistro/estatus`.
+3. Notación con puntos, igual que el POST.
+4. **No envíes `Estatus`.** Solo cambia con `PATCH /registros/:idRegistro/estatus`.
 5. Es un **PATCH parcial**:
    - Omite lo que no quieras cambiar.
-   - `''`, `null` o solo espacios **no sobrescriben** datos existentes.
-   - El valor **`0` sí es válido** (`TipoRegistro`, `PredioObra`, `Estacionamiento`, `TienePrograma`, superficies, etc.).
+   - `''`, `null` o solo espacios **no sobrescriben**.
+   - El valor **`0` sí es válido**.
 6. **`PredioObra` efectivo:**
    - Si envías `PredioObra` → se usa ese valor.
-   - Si no lo envías → se usa el valor ya guardado en `Registros`.
-7. Según el PredioObra efectivo:
-   - `0` → Sapac / Catastro / Licencias / PC + fotos en tabla `Fotos`
-   - `1` → LicenciaConstruccion / Corresponsables + firmas/documentos en `FotosLicenciaConstruccion`
-8. Cambiar de flujo **no borra** información histórica del flujo contrario.
-9. Archivos permitidos: **JPG / JPEG / PNG / PDF** (mismo tamaño máximo que el POST).
-10. Placeholders como `sin registro` en `Correo` se ignoran (no fallan ni actualizan el correo).
+   - Si no → se usa el valor ya guardado.
+7. Según PredioObra efectivo:
+   - `0` → Sapac / Catastro / Licencias / PC + fotos en `Fotos`
+   - `1` → LicenciaConstruccion / Corresponsables + archivos LC en `FotosLicenciaConstruccion`
+8. **Transversales (solo archivos):** `Licencias.fachada|estacionamiento|bodega` se procesan con PredioObra efectivo `0` **y** `1`. Los datos textuales de Licencias/Contacto **solo** con efectivo `0`.
+9. Cambiar de flujo **no borra** información histórica del flujo contrario.
+10. Archivos: JPG / JPEG / PNG / PDF; **máx. 1 por campo**.
+11. Placeholders como `sin registro` en `Correo` se ignoran (no fallan ni actualizan).
 
 ---
 
@@ -46,11 +44,11 @@ Respuesta exitosa: **HTTP 200**
 | Campo | Obligatorio | Notas |
 |------|-------------|--------|
 | `idRegistro` | **Sí** | Entero ≥ 1 |
-| `Registro` | No | Folio / identificador |
+| `Registro` | No | Folio |
 | `Latitud` / `Longitud` | No | number |
-| `TipoRegistro` | No | `0` Local comercial, `1` Vivienda |
+| `TipoRegistro` | No | `0` / `1` |
 | `PredioObra` | No | `0` / `1` (si se omite, usa el almacenado) |
-| `EntidadFederativa` … `CP` | No | Dirección |
+| Dirección | No | |
 
 ---
 
@@ -58,30 +56,24 @@ Respuesta exitosa: **HTTP 200**
 
 ### Textos (opcionales)
 
-Solo envía los que quieras actualizar:
-
 ```text
 Sapac.NumeroCuenta
-Sapac.IdTipoServicio              → 1 = SM, 2 = SP
-Catastro.Clave                    → string (no lo conviertas a number)
+Sapac.IdTipoServicio
+Catastro.Clave
 Licencias.NombreComercial
-Licencias.TipoPersona             → 1 | 2
 Licencias.Estacionamiento         → 0 | 1
-Licencias.FechaHora               → ISO date-time
+Licencias.FechaHora               → ISO date-time (permitido, a diferencia de Sapac)
 Licencias.Contacto.Nombre
-Licencias.Contacto.Telefono
 Licencias.Contacto.Correo         → email válido o vacío / placeholder
-ProteccionCivil.EsEmpresa         → 1 física, 2 moral
+ProteccionCivil.EsEmpresa         → 1 | 2
 ProteccionCivil.TienePrograma     → 0 | 1
 ProteccionCivil.ContactoRepresentante.Nombre
 ```
 
-Si la sección no existe y envías al menos un valor útil → el backend **la crea**.  
+Si la sección no existe y envías un valor útil → el backend **la crea**.  
 Si no envías la sección → **no la toca**.
 
-No envíes campos de `LicenciaConstruccion.*` en este flujo (se sanitizan).
-
-### Archivos (máx. 1 por campo) → tabla `Fotos`
+### Archivos (máx. 1) → `Fotos`
 
 | Campo form | IdTipoFoto |
 |------------|------------|
@@ -95,14 +87,12 @@ No envíes campos de `LicenciaConstruccion.*` en este flujo (se sanitizan).
 | `Licencias.bodega` | 8 |
 | `ProteccionCivil.vistoBueno` | 9 |
 
-**Comportamiento de reemplazo (importante):**
+**Reemplazo no destructivo:**
 
-- Se guarda el archivo **nuevo** en la misma carpeta `{idRegistro}/{idTipoFoto}/` con UUID nuevo.
-- Si ya existía una fila `Fotos` para ese tipo → se **actualiza solo `Ruta`** (mismo `Id`).
-- El archivo **anterior permanece en disco** (no se elimina).
-- No se crean duplicados nuevos para el mismo tipo.
-
-Si solo envías un archivo (p. ej. `Sapac.reciboSapac`) y PredioObra efectivo es `0`, es válido: se crea Sapac vacío si hace falta.
+- Se guarda el archivo nuevo (UUID) en `{idRegistro}/{idTipoFoto}/`.
+- Si ya existía fila `Fotos` para ese tipo → se **actualiza solo `Ruta`** (mismo `Id`).
+- El archivo anterior **permanece en disco**.
+- Respuesta: `accion: 'creada' | 'actualizada'`.
 
 ---
 
@@ -113,10 +103,18 @@ Si solo envías un archivo (p. ej. `Sapac.reciboSapac`) y PredioObra efectivo es
 ```text
 LicenciaConstruccion.TipoSolicitudLicencia   → 1|2|3|4
 LicenciaConstruccion.DescripcionProyecto
-LicenciaConstruccion.SuperficieTerrenoM2     → decimal (0 válido)
-LicenciaConstruccion.NombrePropietario
-LicenciaConstruccion.Fecha                   → date-time ISO
+LicenciaConstruccion.SuperficieTerrenoM2     → 0 válido
+LicenciaConstruccion.NumeroExpediente
+LicenciaConstruccion.NumeroControl
+LicenciaConstruccion.SeguimientoObra         → string
+LicenciaConstruccion.ConstanciaAlineamiento  → 0|1
+LicenciaConstruccion.LicenciaUsoSuelo        → 0|1
+LicenciaConstruccion.PlanoAutorizado         → 0|1
+LicenciaConstruccion.LicenciaFraccionamiento → 0|1
+LicenciaConstruccion.Otros                   → 0|1
 ```
+
+(y el resto de escalares del POST)
 
 ### Corresponsables
 
@@ -129,37 +127,47 @@ LicenciaConstruccion.Corresponsables[0].CedulaProfesional
 
 | Caso | Comportamiento |
 |------|----------------|
-| Con `Id` | Actualiza ese corresponsable (debe pertenecer a la LC del registro) |
-| Sin `Id` + datos útiles | Crea uno nuevo |
+| Con `Id` | Actualiza (debe pertenecer a la LC del registro) |
+| Sin `Id` + datos útiles | Crea |
 | Omitido | **No se elimina** |
-| Solo vacíos | Se ignora (no crea fila vacía) |
+| Solo vacíos | Se ignora |
 
-No envíes `IdLicenciaConstruccion` desde el cliente.
+### Archivos LC (máx. 1) → `FotosLicenciaConstruccion`
 
-### Firmas (máx. 1) → `FotosLicenciaConstruccion`
+Mismos 16 campos que el POST:
 
 | Campo form | IdTipoFoto |
 |------------|------------|
+| `LicenciaConstruccion.constanciaAlineamiento` | 10 |
+| `LicenciaConstruccion.constanciaNumero` | 29 |
+| `LicenciaConstruccion.LicenciaUsoSuelo` | 11 |
+| `LicenciaConstruccion.PlanoAutorizado` | 12 |
+| `LicenciaConstruccion.LicenciaFraccionamiento` | 13 |
+| `LicenciaConstruccion.ConstanciaPropietario` | 14 |
+| `LicenciaConstruccion.Factibilidad` | 15 |
+| `LicenciaConstruccion.RecibosImpuestoPredial` | 16 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos1` | 17 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos2` | 31 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos3` | 32 |
+| `LicenciaConstruccion.otros` | 18 |
 | `LicenciaConstruccion.FirmaPropietario` | 25 |
 | `LicenciaConstruccion.FirmaDRO` | 26 |
 | `LicenciaConstruccion.FirmaCorresponsable` | 27 |
 | `LicenciaConstruccion.FirmaResponsableRecepcionDocumento` | 28 |
 
-### Documentos (múltiples por campo)
+**Reemplazo:** si ya existe fila del mismo `IdLicenciaConstruccion + IdTipoFoto` → conservar `Id`, actualizar solo `Ruta`. No borrar archivo físico.  
+Si no existe LC y llega un archivo → se crea LC mínima.
 
-| Campo form | IdTipoFoto |
-|------------|------------|
-| `LicenciaConstruccion.constanciaAlineamientoyNumero` | 10 |
-| `LicenciaConstruccion.LicenciaUsoyPlano` | 11 |
-| `LicenciaConstruccion.ConstanciaPropietario` | 14 |
-| `LicenciaConstruccion.Factibilidad` | 15 |
-| `LicenciaConstruccion.RecibosImpuestoPredial` | 16 |
-| `LicenciaConstruccion.JuegoDePlanosArquitectonicos` | 17 |
-| `LicenciaConstruccion.otros` | 18 |
+**Obsoletos:** `constanciaAlineamientoyNumero`, `LicenciaUsoyPlano`, `JuegoDePlanosArquitectonicos` (multi).
 
-En el PATCH de construcción los archivos **se agregan** (no reemplazan ni borran los anteriores).
+### Transversales con efectivo = 1
 
-No envíes Sapac/Catastro/Licencias/PC en este flujo (se sanitizan).
+```text
+Licencias.fachada | estacionamiento | bodega  → Fotos 6/7/8
+```
+
+Sí se procesan.  
+`Licencias.NombreComercial`, Contacto, etc. → **se ignoran** (no se borran).
 
 ---
 
@@ -200,6 +208,7 @@ export interface ActualizarRegistroResponse {
       id: number;
       idTipoFoto: number;
       ruta: string;
+      accion?: 'creada' | 'actualizada';
     }>;
   };
 }
@@ -210,7 +219,6 @@ export class RegistrosActualizarApiService {
   private readonly baseUrl = environment.apiUrl;
 
   actualizarRegistro(formData: FormData): Observable<ActualizarRegistroResponse> {
-    // No pongas Content-Type manualmente: el browser agrega el boundary.
     return this.http.patch<ActualizarRegistroResponse>(
       `${this.baseUrl}/registros_actualizar`,
       formData,
@@ -218,8 +226,6 @@ export class RegistrosActualizarApiService {
   }
 }
 ```
-
-El interceptor JWT es el mismo que para el resto de la API (`Authorization: Bearer …`).
 
 ---
 
@@ -231,7 +237,6 @@ El interceptor JWT es el mismo que para el resto de la API (`Authorization: Bear
 type Scalar = string | number | null | undefined;
 type FileInput = File | null | undefined;
 
-/** Solo agrega valores útiles. No envíes '' si no quieres tocar el campo. */
 function appendIfUseful(fd: FormData, key: string, value: Scalar): void {
   if (value === undefined || value === null) return;
   if (typeof value === 'string' && value.trim() === '') return;
@@ -240,16 +245,6 @@ function appendIfUseful(fd: FormData, key: string, value: Scalar): void {
 
 function appendFile(fd: FormData, key: string, file: FileInput): void {
   if (file) fd.append(key, file, file.name);
-}
-
-function appendFiles(
-  fd: FormData,
-  key: string,
-  files: File[] | null | undefined,
-): void {
-  for (const file of files ?? []) {
-    fd.append(key, file, file.name);
-  }
 }
 
 export interface RegistroActualizarFormModel {
@@ -268,7 +263,6 @@ export interface RegistroActualizarFormModel {
   NoExterior?: string | null;
   CP?: string | null;
 
-  // PredioObra = 0
   sapac?: Record<string, Scalar>;
   catastro?: Record<string, Scalar>;
   licencias?: Record<string, Scalar>;
@@ -287,7 +281,6 @@ export interface RegistroActualizarFormModel {
     'ProteccionCivil.vistoBueno'?: FileInput;
   };
 
-  // PredioObra = 1
   licenciaConstruccion?: Record<string, Scalar>;
   corresponsables?: Array<{
     Id?: number;
@@ -295,20 +288,23 @@ export interface RegistroActualizarFormModel {
     NoRegLicenciaConstruccion?: string;
     CedulaProfesional?: string;
   }>;
-  firmas?: {
+  archivosLc?: {
+    'LicenciaConstruccion.constanciaAlineamiento'?: FileInput;
+    'LicenciaConstruccion.constanciaNumero'?: FileInput;
+    'LicenciaConstruccion.LicenciaUsoSuelo'?: FileInput;
+    'LicenciaConstruccion.PlanoAutorizado'?: FileInput;
+    'LicenciaConstruccion.LicenciaFraccionamiento'?: FileInput;
+    'LicenciaConstruccion.ConstanciaPropietario'?: FileInput;
+    'LicenciaConstruccion.Factibilidad'?: FileInput;
+    'LicenciaConstruccion.RecibosImpuestoPredial'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos1'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos2'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos3'?: FileInput;
+    'LicenciaConstruccion.otros'?: FileInput;
     'LicenciaConstruccion.FirmaPropietario'?: FileInput;
     'LicenciaConstruccion.FirmaDRO'?: FileInput;
     'LicenciaConstruccion.FirmaCorresponsable'?: FileInput;
     'LicenciaConstruccion.FirmaResponsableRecepcionDocumento'?: FileInput;
-  };
-  documentosLc?: {
-    'LicenciaConstruccion.constanciaAlineamientoyNumero'?: File[];
-    'LicenciaConstruccion.LicenciaUsoyPlano'?: File[];
-    'LicenciaConstruccion.ConstanciaPropietario'?: File[];
-    'LicenciaConstruccion.Factibilidad'?: File[];
-    'LicenciaConstruccion.RecibosImpuestoPredial'?: File[];
-    'LicenciaConstruccion.JuegoDePlanosArquitectonicos'?: File[];
-    'LicenciaConstruccion.otros'?: File[];
   };
 }
 
@@ -316,7 +312,6 @@ export function buildRegistroActualizarFormData(
   model: RegistroActualizarFormModel,
 ): FormData {
   const fd = new FormData();
-
   fd.append('idRegistro', String(model.idRegistro));
 
   appendIfUseful(fd, 'Registro', model.Registro);
@@ -351,7 +346,6 @@ export function buildRegistroActualizarFormData(
   for (const [k, v] of Object.entries(model.contactoRepresentante ?? {})) {
     appendIfUseful(fd, `ProteccionCivil.ContactoRepresentante.${k}`, v);
   }
-
   for (const [k, file] of Object.entries(model.archivosPredio0 ?? {})) {
     appendFile(fd, k, file as FileInput);
   }
@@ -359,7 +353,6 @@ export function buildRegistroActualizarFormData(
   for (const [k, v] of Object.entries(model.licenciaConstruccion ?? {})) {
     appendIfUseful(fd, `LicenciaConstruccion.${k}`, v);
   }
-
   (model.corresponsables ?? []).forEach((c, i) => {
     appendIfUseful(fd, `LicenciaConstruccion.Corresponsables[${i}].Id`, c.Id);
     appendIfUseful(
@@ -378,12 +371,8 @@ export function buildRegistroActualizarFormData(
       c.CedulaProfesional,
     );
   });
-
-  for (const [k, file] of Object.entries(model.firmas ?? {})) {
+  for (const [k, file] of Object.entries(model.archivosLc ?? {})) {
     appendFile(fd, k, file as FileInput);
-  }
-  for (const [k, files] of Object.entries(model.documentosLc ?? {})) {
-    appendFiles(fd, k, files as File[]);
   }
 
   return fd;
@@ -392,68 +381,62 @@ export function buildRegistroActualizarFormData(
 
 ---
 
-## Ejemplos de uso
+## Ejemplos
 
-### Solo actualizar dirección (PredioObra omitido)
+### Solo dirección
 
 ```typescript
-const fd = buildRegistroActualizarFormData({
+buildRegistroActualizarFormData({
   idRegistro: 10,
   Calle: 'C. San Cristóbal',
   NoExterior: '201',
-  CP: '62230',
-});
-
-this.api.actualizarRegistro(fd).subscribe({
-  next: (res) => console.log(res.data.id, res.data.predioObra),
-  error: (err) => console.error(err.error),
 });
 ```
 
-### Flujo 0: datos Sapac + reemplazar recibo
+### Flujo 0: Sapac + reemplazar recibo
 
 ```typescript
-const fd = buildRegistroActualizarFormData({
+buildRegistroActualizarFormData({
   idRegistro: 10,
   PredioObra: 0,
-  sapac: {
-    NumeroCuenta: '01062026',
-    IdTipoServicio: 1,
-    Nombre: 'Abdiel',
-  },
-  archivosPredio0: {
-    'Sapac.reciboSapac': this.reciboFile, // File del input
-  },
+  sapac: { NumeroCuenta: '01062026', IdTipoServicio: 1 },
+  archivosPredio0: { 'Sapac.reciboSapac': this.reciboFile },
 });
 ```
 
-### Flujo 1: actualizar LC + corresponsable existente + firma nueva
+### Flujo 1: LC + archivo individual + fachada transversal
 
 ```typescript
-const fd = buildRegistroActualizarFormData({
+buildRegistroActualizarFormData({
   idRegistro: 10,
   PredioObra: 1,
   licenciaConstruccion: {
-    DescripcionProyecto: 'Ampliación de vivienda',
-    TipoSolicitudLicencia: 2,
+    DescripcionProyecto: 'Ampliación',
+    NumeroControl: 'CTRL-002',
+    ConstanciaAlineamiento: 0,
   },
   corresponsables: [
     { Id: 5, NombreCompleto: 'Arquitecto Actualizado' },
     { NombreCompleto: 'Arquitecto Nuevo', CedulaProfesional: '7654321' },
   ],
-  firmas: {
-    'LicenciaConstruccion.FirmaPropietario': this.firmaFile,
+  archivosLc: {
+    'LicenciaConstruccion.PlanoAutorizado': this.planoFile,
+    'LicenciaConstruccion.constanciaNumero': this.numeroOficialFile,
+  },
+  archivosPredio0: {
+    // Transversal: válido aunque PredioObra efectivo = 1
+    'Licencias.fachada': this.fachadaFile,
   },
 });
 ```
 
-### Solo archivo (válido si PredioObra almacenado = 0)
+### Solo archivo LC (PredioObra almacenado = 1)
 
 ```typescript
-const fd = buildRegistroActualizarFormData({
+buildRegistroActualizarFormData({
   idRegistro: 10,
-  archivosPredio0: {
-    'Licencias.fachada': this.fachadaFile,
+  archivosLc: {
+    'LicenciaConstruccion.FirmaDRO': this.firmaFile,
   },
 });
 ```
@@ -466,29 +449,25 @@ const fd = buildRegistroActualizarFormData({
 |-----------|-----------|
 | Sin `idRegistro` | 400 |
 | Solo campos vacíos / sin archivos útiles | 400 |
-| `Licencias.Tipo=sin registro` | 400 (`Tipo` es numérico) |
 | Correo con `@` inválido | 400 |
 | Correo `sin registro` (sin `@`) | Se ignora (OK) |
 | Corresponsable `Id` inexistente | 404 |
 | Corresponsable de otra LC | 400 |
-| Archivo MIME no permitido | 400 |
-| Firma enviada con PredioObra efectivo `0` | Se ignora; si no hay más cambios → 400 |
+| Campos LC multi antiguos | 400 / no reconocidos |
 | Recibo SAPAC con PredioObra efectivo `1` | Se ignora |
+| Fachada con PredioObra efectivo `1` | Se procesa |
 
 ---
 
 ## Checklist Angular
 
-- [ ] Usar `FormData`, no `JSON.stringify`.
-- [ ] No fijar `Content-Type` a mano.
-- [ ] Enviar Bearer JWT.
-- [ ] Incluir siempre `idRegistro`.
-- [ ] No enviar `Estatus`.
-- [ ] Omitir campos que no cambian (no mandar `''` para “limpiar”).
-- [ ] Conservar `0` como string/número (`'0'` / `0`), no como `false`/`null`.
-- [ ] Archivos con el **nombre exacto** del form (incluye prefijo `Sapac.` / `LicenciaConstruccion.`).
-- [ ] En flujo 0, un archivo por campo; en documentos LC, varios con el mismo nombre de campo.
-- [ ] Corresponsables: `Id` solo para actualizar; omitir = no borrar.
+- [ ] `FormData` + Bearer JWT; no fijar `Content-Type`.
+- [ ] Siempre `idRegistro`; nunca `Estatus`.
+- [ ] Omitir lo que no cambia; conservar `0`.
+- [ ] Un archivo por campo LC (sin `multiple`).
+- [ ] Nombres nuevos de planos / constanciaNumero.
+- [ ] Corresponsables: `Id` solo para actualizar.
+- [ ] Transversales 6/7/8 válidos con efectivo `1`; datos Licencias no.
 
 ---
 
@@ -499,9 +478,17 @@ const fd = buildRegistroActualizarFormData({
 | URL | `/registros` | `/registros_actualizar` |
 | Método | POST (201) | PATCH (200) |
 | `idRegistro` | No | **Obligatorio** |
-| Campos raíz | Latitud/Longitud/Tipo/Predio **requeridos** | Todos opcionales excepto `idRegistro` |
 | Secciones vacías | PO=0 siempre crea Sapac/Catastro/Licencias/PC | Solo crea si hay datos/archivos útiles |
-| Fotos flujo 0 | Siempre crea filas nuevas | Crea o **actualiza Ruta** (mismo Id) |
+| Fotos | Crea filas | Crea o **actualiza Ruta** (mismo Id) |
 | Archivo viejo | N/A | Se conserva en disco |
-| Corresponsables `Id` | No se envía | Sí, para actualizar |
+| Corresponsables `Id` | No | Sí, para actualizar |
 | `Estatus` | Backend fija 4 | **Nunca** se modifica |
+| Archivos LC | 16 campos individuales | Igual + reemplazo no destructivo |
+
+---
+
+## Referencia backend
+
+- Controller: `src/registros_actualizar/registros-actualizar.controller.ts`
+- Servicio: `src/registros_actualizar/registros-actualizar.service.ts`
+- Constantes: `LC_FILE_TIPO_FOTO`, `LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES`

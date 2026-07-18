@@ -18,6 +18,7 @@ import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interf
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
+import { RegistroDetalleResponseDto } from 'src/registros/dto/registro-detalle-response.dto';
 import { MonitoreoListadoItemDto } from './dto/monitoreo-listado-item.dto';
 import { MonitoreoService } from './monitoreo.service';
 
@@ -77,8 +78,18 @@ Los campos del registro principal están en camelCase.
 
 Incluye campos planos de CapturistaVisita, nombres de capturista/supervisor
 (Usuarios), grupos (\`idGrupoCapturista\`, \`nombreGrupoCapturista\`, etc.)
-y la colección \`fotos\` (IdTipoFoto 6, 7 u 8; arreglo vacío si no hay).
+y la colección \`fotos\` (IdTipoFoto 6, 7 u 8; arreglo vacío si no hay;
+siempre presente sin depender de PredioObra).
 Si no hay visita o faltan usuarios/grupos, esos atributos se devuelven como null.
+
+Con PredioObra = 1, \`LicenciaConstruccion\` incluye una URL nominal (o null) por cada
+archivo de FotosLicenciaConstruccion: \`constanciaAlineamiento\` (10), \`constanciaNumero\` (29),
+\`licenciaUsoSuelo\` (11), \`planoAutorizado\` (12), \`licenciaFraccionamiento\` (13),
+\`ConstanciaPropietario\` (14), \`Factibilidad\` (15), \`RecibosImpuestoPredial\` (16),
+\`JuegoDePlanosArquitectonicos1\` (17), \`JuegoDePlanosArquitectonicos2\` (31),
+\`JuegoDePlanosArquitectonicos3\` (32), \`otros\` (18), \`FirmaPropietario\` (25),
+\`FirmaDRO\` (26), \`FirmaCorresponsable\` (27), \`FirmaResponsableRecepcionDocumento\` (28).
+Con duplicados históricos se devuelve la fila de Id mayor.
 
 Aplica la misma visualización por rol del listado:
 Rol 4/3: todos; Rol 2: grupo; Rol 1: capturista.
@@ -90,10 +101,10 @@ Rol 4/3: todos; Rol 2: grupo; Rol 1: capturista.
     example: 150,
     description: 'Identificador del registro que se desea consultar.',
   })
-  @ApiResponse({
-    status: 200,
+  @ApiOkResponse({
     description:
-      'Detalle del registro (camelCase) con capturista/supervisor/grupos, fotos 6/7/8 y relaciones según PredioObra',
+      'Detalle del registro (camelCase) con capturista/supervisor/grupos, fotos 6/7/8 y relaciones según PredioObra. Envuelto en `{ data }`.',
+    type: RegistroDetalleResponseDto,
   })
   @ApiResponse({
     status: 400,

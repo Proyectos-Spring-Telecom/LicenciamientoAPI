@@ -214,9 +214,19 @@ Devuelve un único registro visible para el usuario autenticado y todos sus dato
 (mismo contrato que \`GET /monitoreo/:idRegistro\`).
 
 Los campos del registro principal, CapturistaVisita, capturista/supervisor/grupos y
-\`fotos\` (tipos 6, 7 y 8) están en camelCase en el mismo nivel dentro de \`data\`.
+\`fotos\` (tipos 6, 7 y 8; siempre presentes sin depender de PredioObra) están en camelCase
+en el mismo nivel dentro de \`data\`.
 Según \`PredioObra\` se agregan las relaciones anidadas (Sapac/Catastro/Licencias/ProteccionCivil
 o LicenciaConstruccion).
+
+\`LicenciaConstruccion\` incluye una URL nominal (o null) por cada archivo de
+FotosLicenciaConstruccion: \`constanciaAlineamiento\` (10), \`constanciaNumero\` (29),
+\`licenciaUsoSuelo\` (11), \`planoAutorizado\` (12), \`licenciaFraccionamiento\` (13),
+\`ConstanciaPropietario\` (14), \`Factibilidad\` (15), \`RecibosImpuestoPredial\` (16),
+\`JuegoDePlanosArquitectonicos1\` (17), \`JuegoDePlanosArquitectonicos2\` (31),
+\`JuegoDePlanosArquitectonicos3\` (32), \`otros\` (18), \`FirmaPropietario\` (25),
+\`FirmaDRO\` (26), \`FirmaCorresponsable\` (27), \`FirmaResponsableRecepcionDocumento\` (28).
+Con duplicados históricos se devuelve la fila de Id mayor.
 
 Visibilidad por rol (JWT):
 - Rol 4/3: cualquier registro.
