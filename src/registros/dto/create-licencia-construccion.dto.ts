@@ -179,14 +179,12 @@ export class CreateLicenciaConstruccionDto {
   @ApiPropertyOptional()
   NumeroControl?: string | null;
 
-  @Transform(toOptionalBinaryFlag)
+  @Transform(emptyToNull)
   @IsOptional()
-  @IsInt({ message: 'SeguimientoObra debe ser un entero' })
-  @IsIn([0, 1], {
-    message: 'SeguimientoObra solo puede tener los valores 0 o 1',
-  })
-  @ApiPropertyOptional({ enum: [0, 1] })
-  SeguimientoObra?: number;
+  @IsString()
+  @MaxLength(50)
+  @ApiPropertyOptional()
+  SeguimientoObra?: string | null;
 
   @Transform(toOptionalBinaryFlag)
   @IsOptional()

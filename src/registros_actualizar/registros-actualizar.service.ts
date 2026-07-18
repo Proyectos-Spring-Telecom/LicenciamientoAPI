@@ -76,6 +76,7 @@ const CAMPOS_LICENCIA_CONSTRUCCION = [
   'NombreDRO',
   'NoRegLicenciaConstruccion',
   'CedulaProfesional',
+  'Fecha',
   'NumeroExpediente',
   'NumeroControl',
   'SeguimientoObra',
@@ -104,6 +105,7 @@ const LC_DTO_TO_ENTITY: Record<(typeof CAMPOS_LICENCIA_CONSTRUCCION)[number], st
     NombreDRO: 'nombreDRO',
     NoRegLicenciaConstruccion: 'noRegLicenciaConstruccion',
     CedulaProfesional: 'cedulaProfesional',
+    Fecha: 'fecha',
     NumeroExpediente: 'numeroExpediente',
     NumeroControl: 'numeroControl',
     SeguimientoObra: 'seguimientoObra',
@@ -736,7 +738,10 @@ export class RegistrosActualizarService {
     }
 
     if (dto && hasLcScalars) {
-      assignUsefulFields(lc, dto, CAMPOS_LICENCIA_CONSTRUCCION, (field) =>
+      const scalarFields = CAMPOS_LICENCIA_CONSTRUCCION.filter(
+        (field) => field !== 'Fecha',
+      );
+      assignUsefulFields(lc, dto, scalarFields, (field) =>
         LC_DTO_TO_ENTITY[field],
       );
       if (tieneValorActualizable(dto.Fecha)) {

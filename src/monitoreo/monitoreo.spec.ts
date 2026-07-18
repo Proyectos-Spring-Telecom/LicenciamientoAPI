@@ -1476,7 +1476,7 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
         fecha: null,
         numeroExpediente: null,
         numeroControl: null,
-        seguimientoObra: 0,
+        seguimientoObra: 'En revisión',
         constanciaAlineamiento: null,
         licenciaUsoSuelo: null,
         planoAutorizado: null,
@@ -1503,7 +1503,7 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     const lc = result.data.LicenciaConstruccion as Record<string, unknown>;
 
     expect(result.data.tipoRegistro).toBe(0);
-    expect(lc.SeguimientoObra).toBe(0);
+    expect(lc.SeguimientoObra).toBe('En revisión');
     expect(lc.TipoSolicitudLicencia).toBeNull();
     expect(lc.DescripcionProyecto).toBeNull();
     expect(lc.Corresponsables).toEqual([
@@ -1519,5 +1519,64 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     expect(lc.FirmaPropietario).toBeNull();
     expect(lc.FirmaDRO).toBeNull();
     expect(result.data).not.toHaveProperty('Sapac');
+  });
+
+  it('mapea nuevos campos escalares de LicenciaConstruccion en GET', async () => {
+    const registro = {
+      ...baseRegistro,
+      predioObra: 1,
+      id: 152,
+    } as Registros;
+    const { service } = createDetailService({
+      registro,
+      licenciaConstruccion: {
+        id: 10,
+        idRegistro: 152,
+        tipoSolicitudLicencia: null,
+        descripcionProyecto: null,
+        superficieTerrenoM2: null,
+        superficieTerrenoObraM2: null,
+        descripcionSistemaConstructivo: null,
+        nombrePropietario: null,
+        domicilioNotificacion: null,
+        rfc: null,
+        nombreDRO: null,
+        noRegLicenciaConstruccion: null,
+        cedulaProfesional: null,
+        fecha: null,
+        numeroExpediente: 'EXP-2026-001',
+        numeroControl: 'CTRL-001',
+        seguimientoObra: 'En revisión',
+        constanciaAlineamiento: 1,
+        licenciaUsoSuelo: 0,
+        planoAutorizado: 1,
+        licenciaFraccionamiento: 0,
+        escrituras: 1,
+        factibilidadAguaPotable: 1,
+        recibosPagoPredial: 0,
+        recibosMunicipales: 1,
+        planoArquitectonicos: 1,
+        otros: 0,
+      } as never,
+      corresponsables: [],
+      fotosLc: [],
+    });
+
+    const result = await service.findOne(152, user({ rol: 4 }));
+    const lc = result.data.LicenciaConstruccion as Record<string, unknown>;
+
+    expect(lc.NumeroExpediente).toBe('EXP-2026-001');
+    expect(lc.NumeroControl).toBe('CTRL-001');
+    expect(lc.SeguimientoObra).toBe('En revisión');
+    expect(lc.ConstanciaAlineamiento).toBe(1);
+    expect(lc.LicenciaUsoSuelo).toBe(0);
+    expect(lc.PlanoAutorizado).toBe(1);
+    expect(lc.LicenciaFraccionamiento).toBe(0);
+    expect(lc.Escrituras).toBe(1);
+    expect(lc.FactibilidadAguaPotable).toBe(1);
+    expect(lc.RecibosPagoPredial).toBe(0);
+    expect(lc.RecibosMunicipales).toBe(1);
+    expect(lc.PlanoArquitectonicos).toBe(1);
+    expect(lc.Otros).toBe(0);
   });
 });
