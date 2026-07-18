@@ -1,4 +1,5 @@
 import { FIRMA_FIELD_NAMES } from './licencia-construccion.constants';
+import { LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES } from './licencias.constants';
 
 const LC_PREFIX = 'LicenciaConstruccion.';
 const SAPAC_PREFIX = 'Sapac.';
@@ -100,7 +101,11 @@ export function sanitizeFieldsByPredioObra(
   return result;
 }
 
-/** Conserva las entradas de Multer; la validación posterior rechaza archivos vacíos. */
+/**
+ * Conserva las entradas de Multer; la validación posterior rechaza archivos vacíos.
+ * Excepción transversal: Licencias.fachada / estacionamiento / bodega
+ * nunca se excluyen por PredioObra (se procesan en ambos flujos).
+ */
 export function sanitizeMultipartFiles(
   files: Record<string, Express.Multer.File[] | undefined> | undefined,
   predioObra?: 0 | 1,
@@ -115,6 +120,7 @@ export function sanitizeMultipartFiles(
     }
     if (
       predioObra === 1 &&
+      !LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES.has(key) &&
       (key.startsWith(SAPAC_PREFIX) ||
         key.startsWith(CATASTRO_PREFIX) ||
         key.startsWith(LICENCIAS_PREFIX) ||

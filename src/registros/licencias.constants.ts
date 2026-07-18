@@ -23,6 +23,23 @@ export const LICENCIAS_FILE_FORM_TO_KEY: Record<string, LicenciasFotoKey> = {
   [LICENCIAS_FILE_FIELD_NAMES.estacionamiento]: 'estacionamiento',
 };
 
+/**
+ * Archivos de Licencias transversales al flujo PredioObra:
+ * se procesan siempre (0 o 1) y se guardan en Fotos (tipos 6, 7 y 8).
+ * licenciaFuncionamiento NO es transversal: solo PredioObra = 0.
+ */
+export const LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES = new Set<string>([
+  LICENCIAS_FILE_FIELD_NAMES.fachada,
+  LICENCIAS_FILE_FIELD_NAMES.estacionamiento,
+  LICENCIAS_FILE_FIELD_NAMES.bodega,
+]);
+
+export const LICENCIAS_TRANSVERSAL_FOTO_KEYS = new Set<LicenciasFotoKey>([
+  'fachada',
+  'estacionamiento',
+  'bodega',
+]);
+
 export const LICENCIAS_SCALAR_ATTRS = new Set([
   'Registro',
   'NombreComercial',
