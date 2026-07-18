@@ -23,11 +23,7 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { CATASTRO_FILE_FIELD_NAMES } from 'src/registros/catastro.constants';
-import {
-  FIRMA_FIELD_NAMES,
-  LC_DOCUMENTO_FIELD_NAMES,
-  MAX_DOCUMENTOS_POR_TIPO,
-} from 'src/registros/licencia-construccion.constants';
+import { LICENCIA_CONSTRUCCION_FILE_TYPE_MAP } from 'src/registros/licencia-construccion.constants';
 import { LICENCIAS_FILE_FIELD_NAMES } from 'src/registros/licencias.constants';
 import { PROTECCION_CIVIL_FILE_FIELD_NAMES } from 'src/registros/proteccion-civil.constants';
 import { SAPAC_FILE_FIELD_NAMES } from 'src/registros/sapac.constants';
@@ -39,27 +35,50 @@ const UPLOAD_MAX =
     : 10 * 1024 * 1024;
 
 const MAX_UPLOAD_FILES =
-  Object.keys(FIRMA_FIELD_NAMES).length +
-  Object.keys(LC_DOCUMENTO_FIELD_NAMES).length * MAX_DOCUMENTOS_POR_TIPO +
+  Object.keys(LICENCIA_CONSTRUCCION_FILE_TYPE_MAP).length +
   Object.keys(SAPAC_FILE_FIELD_NAMES).length +
   Object.keys(CATASTRO_FILE_FIELD_NAMES).length +
   Object.keys(LICENCIAS_FILE_FIELD_NAMES).length +
   Object.keys(PROTECCION_CIVIL_FILE_FIELD_NAMES).length;
-
-const multiBinaryFiles = {
-  type: 'array' as const,
-  items: {
-    type: 'string' as const,
-    format: 'binary' as const,
-  },
-  maxItems: MAX_DOCUMENTOS_POR_TIPO,
-};
 
 const binaryTiny = {
   type: 'integer' as const,
   enum: [0, 1],
   nullable: true,
 };
+
+/** Campos de archivo de LicenciaConstruccion: máx. 1 archivo por campo. */
+const LC_FILE_INTERCEPTOR_FIELDS = Object.keys(
+  LICENCIA_CONSTRUCCION_FILE_TYPE_MAP,
+).map((name) => ({ name, maxCount: 1 }));
+
+/**
+ * Nombres que también existen como indicador tinyint en el body.
+ * NestJS los separa (body vs files); Swagger solo documenta una propiedad.
+ */
+const LC_FILE_BODY_COLLISION = new Set([
+  'LicenciaConstruccion.LicenciaUsoSuelo',
+  'LicenciaConstruccion.PlanoAutorizado',
+  'LicenciaConstruccion.LicenciaFraccionamiento',
+]);
+
+/** Swagger: un binario opcional por campo/IdTipoFoto de LicenciaConstruccion. */
+const LC_FILE_SWAGGER_PROPERTIES = Object.fromEntries(
+  Object.entries(LICENCIA_CONSTRUCCION_FILE_TYPE_MAP).map(
+    ([name, idTipoFoto]) => [
+      name,
+      {
+        type: 'string' as const,
+        format: 'binary' as const,
+        description:
+          `Opcional. JPG/JPEG/PNG/PDF. Máx. 1 archivo. Solo PredioObra efectivo=1. IdTipoFoto=${idTipoFoto} → FotosLicenciaConstruccion (reemplaza Ruta si existe; no elimina archivo anterior)` +
+          (LC_FILE_BODY_COLLISION.has(name)
+            ? '. Nota: si se envía como texto en el body, el mismo nombre corresponde al indicador tinyint 0/1.'
+            : ''),
+      },
+    ],
+  ),
+);
 
 @ApiTags('Registros Actualizar')
 @ApiBearerAuth('bearer-token')
@@ -81,7 +100,8 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
 (\`body.PredioObra ?? registro.PredioObra\`):
 
 - **PredioObra = 0:** Sapac, Catastro, Licencias (+ Contacto), ProteccionCivil (+ ContactoRepresentante) y archivos → Fotos (reemplazo no destructivo de Ruta).
-- **PredioObra = 1:** LicenciaConstruccion, Corresponsables, firmas y documentos → FotosLicenciaConstruccion.
+- **PredioObra = 1:** LicenciaConstruccion, Corresponsables y archivos individuales
+  (1 por IdTipoFoto) → FotosLicenciaConstruccion (reemplazo no destructivo de Ruta).
 
 - \`idRegistro\` es obligatorio (body multipart).
 - Campos omitidos / vacíos / null no sobrescriben valores existentes.
@@ -386,9 +406,9 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           nullable: true,
         },
         'LicenciaConstruccion.ConstanciaAlineamiento': binaryTiny,
-        'LicenciaConstruccion.LicenciaUsoSuelo': binaryTiny,
-        'LicenciaConstruccion.PlanoAutorizado': binaryTiny,
-        'LicenciaConstruccion.LicenciaFraccionamiento': binaryTiny,
+        // LicenciaUsoSuelo / PlanoAutorizado / LicenciaFraccionamiento:
+        // coinciden con archivos; Swagger los documenta como binario en
+        // LC_FILE_SWAGGER_PROPERTIES (con nota dual).
         'LicenciaConstruccion.Escrituras': binaryTiny,
         'LicenciaConstruccion.FactibilidadAguaPotable': binaryTiny,
         'LicenciaConstruccion.RecibosPagoPredial': binaryTiny,
@@ -465,76 +485,27 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
         [LICENCIAS_FILE_FIELD_NAMES.fachada]: {
           type: 'string',
           format: 'binary',
-          description: 'Solo PredioObra=0. IdTipoFoto=6 → Fotos',
+          description:
+            'Transversal: se procesa con PredioObra=0 y PredioObra=1. IdTipoFoto=6 → Fotos',
         },
         [LICENCIAS_FILE_FIELD_NAMES.estacionamiento]: {
           type: 'string',
           format: 'binary',
-          description: 'Solo PredioObra=0. IdTipoFoto=7 → Fotos',
+          description:
+            'Transversal: se procesa con PredioObra=0 y PredioObra=1. IdTipoFoto=7 → Fotos',
         },
         [LICENCIAS_FILE_FIELD_NAMES.bodega]: {
           type: 'string',
           format: 'binary',
-          description: 'Solo PredioObra=0. IdTipoFoto=8 → Fotos',
+          description:
+            'Transversal: se procesa con PredioObra=0 y PredioObra=1. IdTipoFoto=8 → Fotos',
         },
         [PROTECCION_CIVIL_FILE_FIELD_NAMES.vistoBueno]: {
           type: 'string',
           format: 'binary',
           description: 'Solo PredioObra=0. IdTipoFoto=9 → Fotos',
         },
-        [LC_DOCUMENTO_FIELD_NAMES.constanciaAlineamientoyNumero]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. JPG/JPEG/PNG/PDF. Hasta ${MAX_DOCUMENTOS_POR_TIPO}. IdTipoFoto=10`,
-        },
-
-        [LC_DOCUMENTO_FIELD_NAMES.LicenciaUsoyPlano]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=11`,
-        },
-        [LC_DOCUMENTO_FIELD_NAMES.ConstanciaPropietario]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=14`,
-        },
-        [LC_DOCUMENTO_FIELD_NAMES.Factibilidad]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=15`,
-        },
-        [LC_DOCUMENTO_FIELD_NAMES.RecibosImpuestoPredial]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=16`,
-        },
-        [LC_DOCUMENTO_FIELD_NAMES.JuegoDePlanosArquitectonicos]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=17`,
-        },
-        [LC_DOCUMENTO_FIELD_NAMES.otros]: {
-          ...multiBinaryFiles,
-          description: `Solo PredioObra=1. IdTipoFoto=18`,
-        },
-        [FIRMA_FIELD_NAMES.FirmaPropietario]: {
-          type: 'string',
-          format: 'binary',
-          description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=1. IdTipoFoto=25 → FotosLicenciaConstruccion',
-        },
-        [FIRMA_FIELD_NAMES.FirmaDRO]: {
-          type: 'string',
-          format: 'binary',
-          description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=1. IdTipoFoto=26',
-        },
-        [FIRMA_FIELD_NAMES.FirmaCorresponsable]: {
-          type: 'string',
-          format: 'binary',
-          description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=1. IdTipoFoto=27',
-        },
-        [FIRMA_FIELD_NAMES.FirmaResponsableRecepcionDocumento]: {
-          type: 'string',
-          format: 'binary',
-          description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=1. IdTipoFoto=28',
-        },
+        ...LC_FILE_SWAGGER_PROPERTIES,
       },
     },
   })
@@ -566,41 +537,7 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
         { name: LICENCIAS_FILE_FIELD_NAMES.estacionamiento, maxCount: 1 },
         { name: LICENCIAS_FILE_FIELD_NAMES.bodega, maxCount: 1 },
         { name: PROTECCION_CIVIL_FILE_FIELD_NAMES.vistoBueno, maxCount: 1 },
-        { name: FIRMA_FIELD_NAMES.FirmaPropietario, maxCount: 1 },
-        { name: FIRMA_FIELD_NAMES.FirmaDRO, maxCount: 1 },
-        { name: FIRMA_FIELD_NAMES.FirmaCorresponsable, maxCount: 1 },
-        {
-          name: FIRMA_FIELD_NAMES.FirmaResponsableRecepcionDocumento,
-          maxCount: 1,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.constanciaAlineamientoyNumero,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.LicenciaUsoyPlano,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.ConstanciaPropietario,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.Factibilidad,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.RecibosImpuestoPredial,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.JuegoDePlanosArquitectonicos,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
-        {
-          name: LC_DOCUMENTO_FIELD_NAMES.otros,
-          maxCount: MAX_DOCUMENTOS_POR_TIPO,
-        },
+        ...LC_FILE_INTERCEPTOR_FIELDS,
       ],
       {
         storage: memoryStorage(),

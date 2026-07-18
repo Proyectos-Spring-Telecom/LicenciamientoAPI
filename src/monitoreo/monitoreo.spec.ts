@@ -1081,16 +1081,17 @@ describe('MonitoreoService.findOne', () => {
           cedulaProfesional: 'CED-001',
         },
       ],
+      // Orden que produce la consulta real: IdTipoFoto ASC, Id DESC.
       fotosLc: [
-        {
-          id: 1,
-          idTipoFoto: 10,
-          ruta: 'https://springtelecom.mx/registros/data/151/10/d1.pdf',
-        },
         {
           id: 2,
           idTipoFoto: 10,
           ruta: 'https://springtelecom.mx/registros/data/151/10/d2.pdf',
+        },
+        {
+          id: 1,
+          idTipoFoto: 10,
+          ruta: 'https://springtelecom.mx/registros/data/151/10/d1.pdf',
         },
         {
           id: 3,
@@ -1128,15 +1129,24 @@ describe('MonitoreoService.findOne', () => {
         NoRegLicenciaConstruccion: 'REG-001',
       }),
     ]);
-    expect(lc.constanciaAlineamientoyNumero).toEqual([
-      'https://springtelecom.mx/registros/data/151/10/d1.pdf',
+    expect(fotosLicenciaConstruccionRepository.find).toHaveBeenCalledWith({
+      where: { idLicenciaConstruccion: 9 },
+      order: { idTipoFoto: 'ASC', id: 'DESC' },
+    });
+    // Duplicado histórico tipo 10: se toma la fila de Id mayor (2).
+    expect(lc.constanciaAlineamiento).toBe(
       'https://springtelecom.mx/registros/data/151/10/d2.pdf',
-    ]);
-    expect(lc.LicenciaUsoyPlano).toEqual([]);
+    );
     expect(lc.FirmaPropietario).toBe(
       'https://springtelecom.mx/registros/data/151/25/firma.png',
     );
     expect(lc.FirmaDRO).toBeNull();
+    expect(lc.constanciaNumero).toBeNull();
+    expect(lc.licenciaUsoSuelo).toBeNull();
+    expect(lc.JuegoDePlanosArquitectonicos2).toBeNull();
+    expect(lc).not.toHaveProperty('constanciaAlineamientoyNumero');
+    expect(lc).not.toHaveProperty('LicenciaUsoyPlano');
+    expect(lc).not.toHaveProperty('JuegoDePlanosArquitectonicos');
   });
 
   it('sin CapturistaVisita rellena atributos null y no lanza 500', async () => {
@@ -1514,10 +1524,30 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
         CedulaProfesional: null,
       },
     ]);
-    expect(lc.LicenciaUsoyPlano).toEqual([]);
-    expect(lc.constanciaAlineamientoyNumero).toEqual([]);
-    expect(lc.FirmaPropietario).toBeNull();
-    expect(lc.FirmaDRO).toBeNull();
+    // Sin fotos: todos los campos nominales presentes y en null.
+    for (const campo of [
+      'constanciaAlineamiento',
+      'constanciaNumero',
+      'licenciaUsoSuelo',
+      'planoAutorizado',
+      'licenciaFraccionamiento',
+      'ConstanciaPropietario',
+      'Factibilidad',
+      'RecibosImpuestoPredial',
+      'JuegoDePlanosArquitectonicos1',
+      'JuegoDePlanosArquitectonicos2',
+      'JuegoDePlanosArquitectonicos3',
+      'otros',
+      'FirmaPropietario',
+      'FirmaDRO',
+      'FirmaCorresponsable',
+      'FirmaResponsableRecepcionDocumento',
+    ]) {
+      expect(lc).toHaveProperty(campo, null);
+    }
+    expect(lc).not.toHaveProperty('constanciaAlineamientoyNumero');
+    expect(lc).not.toHaveProperty('LicenciaUsoyPlano');
+    expect(lc).not.toHaveProperty('JuegoDePlanosArquitectonicos');
     expect(result.data).not.toHaveProperty('Sapac');
   });
 
@@ -1578,5 +1608,103 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     expect(lc.RecibosMunicipales).toBe(1);
     expect(lc.PlanoArquitectonicos).toBe(1);
     expect(lc.Otros).toBe(0);
+  });
+
+  it('mapea las 16 fotos nominales de LC y deja el tipo 30 fuera de la salida nominal', async () => {
+    const registro = { ...baseRegistro, predioObra: 1, id: 153 } as Registros;
+    const url = (tipo: number) =>
+      `https://springtelecom.mx/registros/data/153/${tipo}/uuid.pdf`;
+    const tipos = [
+      10, 11, 12, 13, 14, 15, 16, 17, 18, 25, 26, 27, 28, 29, 30, 31, 32,
+    ];
+    const { service } = createDetailService({
+      registro,
+      licenciaConstruccion: {
+        id: 30,
+        idRegistro: 153,
+        licenciaUsoSuelo: 1,
+        planoAutorizado: 0,
+        licenciaFraccionamiento: 1,
+      } as never,
+      corresponsables: [],
+      fotosLc: tipos.map((tipo, index) => ({
+        id: index + 1,
+        idTipoFoto: tipo,
+        ruta: url(tipo),
+      })),
+    });
+
+    const result = await service.findOne(153, user({ rol: 4 }));
+    const lc = result.data.LicenciaConstruccion as Record<string, unknown>;
+
+    expect(lc.constanciaAlineamiento).toBe(url(10));
+    expect(lc.constanciaNumero).toBe(url(29));
+    expect(lc.licenciaUsoSuelo).toBe(url(11));
+    expect(lc.planoAutorizado).toBe(url(12));
+    expect(lc.licenciaFraccionamiento).toBe(url(13));
+    expect(lc.ConstanciaPropietario).toBe(url(14));
+    expect(lc.Factibilidad).toBe(url(15));
+    expect(lc.RecibosImpuestoPredial).toBe(url(16));
+    expect(lc.JuegoDePlanosArquitectonicos1).toBe(url(17));
+    expect(lc.JuegoDePlanosArquitectonicos2).toBe(url(31));
+    expect(lc.JuegoDePlanosArquitectonicos3).toBe(url(32));
+    expect(lc.otros).toBe(url(18));
+    expect(lc.FirmaPropietario).toBe(url(25));
+    expect(lc.FirmaDRO).toBe(url(26));
+    expect(lc.FirmaCorresponsable).toBe(url(27));
+    expect(lc.FirmaResponsableRecepcionDocumento).toBe(url(28));
+
+    // Los indicadores tinyint conservan su nombre PascalCase (dato ≠ archivo).
+    expect(lc.LicenciaUsoSuelo).toBe(1);
+    expect(lc.PlanoAutorizado).toBe(0);
+    expect(lc.LicenciaFraccionamiento).toBe(1);
+
+    // Tipo 30 (Recibo Servicios Municipales) sin atributo nominal en contrato.
+    const urls = Object.values(lc).filter((v) => typeof v === 'string');
+    expect(urls).not.toContain(url(30));
+
+    expect(lc).not.toHaveProperty('constanciaAlineamientoyNumero');
+    expect(lc).not.toHaveProperty('LicenciaUsoyPlano');
+    expect(lc).not.toHaveProperty('JuegoDePlanosArquitectonicos');
+  });
+
+  it('PredioObra=1 conserva el arreglo fotos (6/7/8) transversal en el detalle', async () => {
+    const registro = { ...baseRegistro, predioObra: 1, id: 154 } as Registros;
+    const { service } = createDetailService({
+      registro,
+      licenciaConstruccion: null,
+      fotosListado: [
+        {
+          id: 61,
+          idRegistro: 154,
+          idTipoFoto: 6,
+          ruta: 'https://springtelecom.mx/registros/data/154/6/fachada.jpg',
+          fechaHora: null,
+        },
+        {
+          id: 71,
+          idRegistro: 154,
+          idTipoFoto: 7,
+          ruta: 'https://springtelecom.mx/registros/data/154/7/estacionamiento.jpg',
+          fechaHora: null,
+        },
+        {
+          id: 81,
+          idRegistro: 154,
+          idTipoFoto: 8,
+          ruta: 'https://springtelecom.mx/registros/data/154/8/bodega.jpg',
+          fechaHora: null,
+        },
+      ],
+    });
+
+    const result = await service.findOne(154, user({ rol: 4 }));
+
+    expect(result.data.LicenciaConstruccion).toBeNull();
+    expect(result.data.fotos).toEqual([
+      expect.objectContaining({ idTipoFoto: 6 }),
+      expect.objectContaining({ idTipoFoto: 7 }),
+      expect.objectContaining({ idTipoFoto: 8 }),
+    ]);
   });
 });

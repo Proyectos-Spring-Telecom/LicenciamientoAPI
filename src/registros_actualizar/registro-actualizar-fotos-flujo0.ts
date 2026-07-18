@@ -9,6 +9,7 @@ import {
   LICENCIAS_FILE_FIELD_NAMES,
   LICENCIAS_FILE_FORM_TO_KEY,
   LICENCIAS_TIPO_FOTO,
+  LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES,
   LicenciasFotoKey,
 } from 'src/registros/licencias.constants';
 import {
@@ -43,19 +44,26 @@ export type ParsedFotosFlujo0 = {
 
 /**
  * Sanitiza archivos del flujo PredioObra = 0.
- * PredioObra = 1 → descarta (no validar ni guardar).
+ * PredioObra = 1 → descarta, excepto los transversales de Licencias
+ * (fachada/estacionamiento/bodega), que se procesan en ambos flujos.
  */
 export function sanitizeFotosFlujo0ByPredioObra(
   files: Record<string, Express.Multer.File[] | undefined> | undefined,
   predioObraEfectivo: 0 | 1,
 ): Record<string, Express.Multer.File[]> {
   const result: Record<string, Express.Multer.File[]> = {};
-  if (!files || predioObraEfectivo !== 0) {
+  if (!files) {
     return result;
   }
 
   for (const [key, list] of Object.entries(files)) {
     if (!FOTOS_FLUJO0_FIELD_NAMES.has(key) || !list?.length) continue;
+    if (
+      predioObraEfectivo === 1 &&
+      !LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES.has(key)
+    ) {
+      continue;
+    }
     const valid = list.filter((f) => f?.buffer?.length);
     if (valid.length) result[key] = valid;
   }

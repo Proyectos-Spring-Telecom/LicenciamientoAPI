@@ -5,6 +5,10 @@ import {
 } from './registro-actualizar-fotos-flujo0';
 import { SAPAC_FILE_FIELD_NAMES } from 'src/registros/sapac.constants';
 import { FIRMA_FIELD_NAMES } from 'src/registros/licencia-construccion.constants';
+import {
+  LICENCIAS_FILE_FIELD_NAMES,
+  LICENCIAS_TIPO_FOTO,
+} from 'src/registros/licencias.constants';
 
 describe('registro-actualizar-fotos-flujo0', () => {
   const fake = (name: string): Express.Multer.File =>
@@ -26,6 +30,42 @@ describe('registro-actualizar-fotos-flujo0', () => {
       1,
     );
     expect(sanitized).toEqual({});
+  });
+
+  it('conserva fachada/estacionamiento/bodega cuando PredioObra = 1', () => {
+    const sanitized = sanitizeFotosFlujo0ByPredioObra(
+      {
+        [SAPAC_FILE_FIELD_NAMES.reciboSapac]: [
+          fake(SAPAC_FILE_FIELD_NAMES.reciboSapac),
+        ],
+        [LICENCIAS_FILE_FIELD_NAMES.fachada]: [
+          fake(LICENCIAS_FILE_FIELD_NAMES.fachada),
+        ],
+        [LICENCIAS_FILE_FIELD_NAMES.estacionamiento]: [
+          fake(LICENCIAS_FILE_FIELD_NAMES.estacionamiento),
+        ],
+        [LICENCIAS_FILE_FIELD_NAMES.bodega]: [
+          fake(LICENCIAS_FILE_FIELD_NAMES.bodega),
+        ],
+      },
+      1,
+    );
+    expect(sanitized[SAPAC_FILE_FIELD_NAMES.reciboSapac]).toBeUndefined();
+    expect(Object.keys(sanitized).sort()).toEqual(
+      [
+        LICENCIAS_FILE_FIELD_NAMES.fachada,
+        LICENCIAS_FILE_FIELD_NAMES.estacionamiento,
+        LICENCIAS_FILE_FIELD_NAMES.bodega,
+      ].sort(),
+    );
+
+    const parsed = parseFotosFlujo0Actualizar(sanitized);
+    expect(parsed.hasFotos).toBe(true);
+    expect(parsed.photoInputs.map((p) => p.idTipoFoto).sort()).toEqual([
+      LICENCIAS_TIPO_FOTO.fachada,
+      LICENCIAS_TIPO_FOTO.estacionamiento,
+      LICENCIAS_TIPO_FOTO.bodega,
+    ]);
   });
 
   it('parsea Sapac.reciboSapac → IdTipoFoto 3', () => {

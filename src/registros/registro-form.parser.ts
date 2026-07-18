@@ -18,24 +18,17 @@ import {
 import {
   CORRESPONSABLE_SCALAR_ATTRS,
   CORRESPONSABLES_INDEXED_RE,
-  FIRMA_FIELD_NAMES,
-  FIRMA_FORM_TO_KEY,
-  LC_DOCUMENTO_FIELD_NAMES,
-  LC_DOCUMENTO_FORM_TO_KEY,
+  LC_FILE_FIELD_NAMES,
+  LC_FILE_FORM_TO_KEY,
   LC_SCALAR_ATTRS,
-  FirmaKey,
-  LcDocumentoKey,
-  MAX_DOCUMENTOS_POR_TIPO,
+  LcFileKey,
 } from './licencia-construccion.constants';
 import {
   normalizePredioObra,
   sanitizeFieldsByPredioObra,
   sanitizeMultipartFiles,
 } from './licencia-construccion.sanitize';
-import {
-  FirmaFiles,
-  LcDocumentoFiles,
-} from './licencia-construccion-storage.service';
+import { LcFiles } from './licencia-construccion-storage.service';
 import {
   CONTACTO_FORM_PREFIX,
   CONTACTO_SCALAR_ATTRS,
@@ -82,12 +75,11 @@ export interface ParsedRegistroForm {
   contacto?: CreateContactoDto;
   proteccionCivil?: CreateProteccionCivilDto;
   contactoRepresentante?: CreateContactoRepresentanteDto;
-  firmas: FirmaFiles;
+  archivosLc: LcFiles;
   fotosSapac: SapacFotoFiles;
   fotosCatastro: CatastroFotoFiles;
   fotosLicencias: LicenciasFotoFiles;
   fotosProteccionCivil: ProteccionCivilFotoFiles;
-  documentosLc: LcDocumentoFiles;
   crearLicenciaConstruccion: boolean;
   crearSapac: boolean;
   crearCatastro: boolean;
@@ -191,11 +183,17 @@ export async function parseRegistroMultipart(
   const sanitizedBody = sanitizeFieldsByPredioObra(body ?? {}, predioObra);
   const sanitizedFiles = sanitizeMultipartFiles(uploaded, predioObra);
 
-  const firmaFieldNames = new Set(
-    Object.values(FIRMA_FIELD_NAMES) as string[],
+  const lcFileFieldNames = new Set(
+    Object.values(LC_FILE_FIELD_NAMES) as string[],
   );
-  const documentoLcFieldNames = new Set(
-    Object.values(LC_DOCUMENTO_FIELD_NAMES) as string[],
+  // Nombres que solo existen como archivo: si además son atributo escalar
+  // (LicenciaUsoSuelo/PlanoAutorizado/LicenciaFraccionamiento tinyint), el
+  // valor textual del body debe seguir llegando al DTO, no descartarse.
+  const lcFileOnlyFieldNames = new Set(
+    [...lcFileFieldNames].filter(
+      (name) =>
+        !LC_SCALAR_ATTRS.has(name.slice('LicenciaConstruccion.'.length)),
+    ),
   );
   const sapacFileFieldNames = new Set(
     Object.values(SAPAC_FILE_FIELD_NAMES) as string[],
@@ -213,7 +211,7 @@ export async function parseRegistroMultipart(
   if (
     predioObra === 0 &&
     Object.entries(sanitizedFiles).some(
-      ([key, files]) => firmaFieldNames.has(key) && files.length > 0,
+      ([key, files]) => lcFileFieldNames.has(key) && files.length > 0,
     )
   ) {
     throw new BadRequestException(
@@ -279,8 +277,7 @@ export async function parseRegistroMultipart(
     if (value === undefined) continue;
 
     if (
-      firmaFieldNames.has(key) ||
-      documentoLcFieldNames.has(key) ||
+      lcFileOnlyFieldNames.has(key) ||
       sapacFileFieldNames.has(key) ||
       catastroFileFieldNames.has(key) ||
       licenciasFileFieldNames.has(key) ||
@@ -449,22 +446,19 @@ export async function parseRegistroMultipart(
     throw new BadRequestException(`Campo no reconocido: "${key}"`);
   }
 
-  const firmas: FirmaFiles = {};
-  const documentosLc: LcDocumentoFiles = {};
+  const archivosLc: LcFiles = {};
   const fotosSapac: SapacFotoFiles = {};
   const fotosCatastro: CatastroFotoFiles = {};
   const fotosLicencias: LicenciasFotoFiles = {};
   const fotosProteccionCivil: ProteccionCivilFotoFiles = {};
   for (const [formName, files] of Object.entries(sanitizedFiles)) {
-    const firmaKey = FIRMA_FORM_TO_KEY[formName];
-    const documentoKey = LC_DOCUMENTO_FORM_TO_KEY[formName];
+    const lcFileKey = LC_FILE_FORM_TO_KEY[formName];
     const sapacFotoKey = SAPAC_FILE_FORM_TO_KEY[formName];
     const catastroFotoKey = CATASTRO_FILE_FORM_TO_KEY[formName];
     const licenciasFotoKey = LICENCIAS_FILE_FORM_TO_KEY[formName];
     const proteccionCivilFotoKey = PROTECCION_CIVIL_FILE_FORM_TO_KEY[formName];
     if (
-      !firmaKey &&
-      !documentoKey &&
+      !lcFileKey &&
       !sapacFotoKey &&
       !catastroFotoKey &&
       !licenciasFotoKey &&
@@ -479,23 +473,13 @@ export async function parseRegistroMultipart(
     }
     if (!files?.length) continue;
 
-    if (documentoKey) {
-      if (files.length > MAX_DOCUMENTOS_POR_TIPO) {
-        throw new BadRequestException(
-          `El campo ${formName} excede el máximo permitido de documentos.`,
-        );
-      }
-      documentosLc[documentoKey as LcDocumentoKey] = files;
-      continue;
-    }
-
     if (files.length > 1) {
       throw new BadRequestException(
         `Solo se permite un archivo para "${formName}"`,
       );
     }
-    if (firmaKey) {
-      firmas[firmaKey as FirmaKey] = files[0];
+    if (lcFileKey) {
+      archivosLc[lcFileKey as LcFileKey] = files[0];
     } else if (sapacFotoKey) {
       fotosSapac[sapacFotoKey as SapacFotoKey] = files[0];
     } else if (catastroFotoKey) {
@@ -636,12 +620,11 @@ export async function parseRegistroMultipart(
     contacto,
     proteccionCivil,
     contactoRepresentante,
-    firmas,
+    archivosLc,
     fotosSapac,
     fotosCatastro,
     fotosLicencias,
     fotosProteccionCivil,
-    documentosLc,
     crearLicenciaConstruccion,
     crearSapac,
     crearCatastro,

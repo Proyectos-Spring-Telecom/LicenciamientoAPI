@@ -1,6 +1,8 @@
 # Consumir `POST /registros` desde Angular
 
-Guía práctica para crear un registro desde Angular usando `multipart/form-data`, igual que Flutter / Swagger.
+Guía práctica para crear un registro desde Angular usando `multipart/form-data`.
+
+Contrato completo: [contratos.md](./contratos.md) · Contexto: [contexto.md](./contexto.md) · PATCH: [consumo-patch-registros-actualizar-angular.md](./consumo-patch-registros-actualizar-angular.md)
 
 ## Endpoint
 
@@ -24,10 +26,12 @@ Respuesta exitosa: **HTTP 201**
 3. **No envíes** `IdCapturista` ni `IdGrupo`: salen del JWT.
 4. **No envíes** `Estatus` ni `Registro`: el backend fija `Estatus=4` y `Registro=null`.
 5. `PredioObra` define el flujo:
-   - `0` → Sapac, Catastro, Licencias, ProteccionCivil (+ fotos)
-   - `1` → LicenciaConstruccion, corresponsables, firmas y documentos
-6. Archivos permitidos: **JPG / JPEG / PNG / PDF**.
-7. Valores `0` son válidos (`TipoRegistro`, `PredioObra`, etc.). No los conviertas a `null` ni a `boolean`.
+   - `0` → Sapac, Catastro, Licencias, ProteccionCivil (+ fotos 1–9)
+   - `1` → LicenciaConstruccion, corresponsables, archivos LC (10–18, 25–29, 31–32)
+6. **Excepción transversal (solo archivos):** `Licencias.fachada`, `Licencias.estacionamiento`, `Licencias.bodega` se procesan **también** con `PredioObra = 1`. El resto de datos de Licencias no.
+7. Archivos permitidos: **JPG / JPEG / PNG / PDF**.
+8. Valores `0` son válidos. No los conviertas a `null` ni a `boolean`.
+9. Cada archivo de LicenciaConstruccion: **máximo 1** por campo (ya no hay campos multi-archivo).
 
 ---
 
@@ -39,14 +43,7 @@ Respuesta exitosa: **HTTP 201**
 | `Longitud` | Sí | number |
 | `TipoRegistro` | Sí | `0` Local comercial, `1` Vivienda |
 | `PredioObra` | Sí | `0` No construcción, `1` En construcción |
-| `EntidadFederativa` | No | string |
-| `Municipio` | No | string |
-| `Localidad` | No | string |
-| `Colonia` | No | string |
-| `Calle` | No | string |
-| `NoInterior` | No | string |
-| `NoExterior` | No | string |
-| `CP` | No | string (conserva ceros) |
+| `EntidadFederativa` … `CP` | No | string (`CP` conserva ceros) |
 
 ---
 
@@ -64,6 +61,7 @@ Sapac.IdTipoServicio          → 1 = SM, 2 = SP
 Catastro.Clave
 Licencias.NombreComercial
 Licencias.TipoPersona         → 1 | 2
+Licencias.Estacionamiento     → 0 | 1
 Licencias.Contacto.Nombre
 ProteccionCivil.EsEmpresa     → 1 física, 2 moral
 ProteccionCivil.TienePrograma → 0 | 1
@@ -73,7 +71,7 @@ ProteccionCivil.ContactoRepresentante.Telefono
 El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil (aunque vengan vacíos).  
 Contacto / ContactoRepresentante solo si traen información.
 
-### Archivos (máx. 1 por campo)
+### Archivos (máx. 1 por campo) → `Fotos`
 
 | Campo form | IdTipoFoto |
 |------------|------------|
@@ -87,17 +85,31 @@ Contacto / ContactoRepresentante solo si traen información.
 | `Licencias.bodega` | 8 |
 | `ProteccionCivil.vistoBueno` | 9 |
 
-No envíes firmas ni documentos de LicenciaConstruccion en este flujo.
+No envíes archivos de LicenciaConstruccion en este flujo.
 
 ---
 
 ## Flujo `PredioObra = 1`
 
-### Textos
+### Textos LicenciaConstruccion
 
 ```text
 LicenciaConstruccion.TipoSolicitudLicencia   → 1|2|3|4
 LicenciaConstruccion.DescripcionProyecto
+LicenciaConstruccion.SuperficieTerrenoM2     → 0 válido
+LicenciaConstruccion.NumeroExpediente        → max 50
+LicenciaConstruccion.NumeroControl           → max 50
+LicenciaConstruccion.SeguimientoObra         → string max 50
+LicenciaConstruccion.ConstanciaAlineamiento  → 0|1
+LicenciaConstruccion.LicenciaUsoSuelo        → 0|1
+LicenciaConstruccion.PlanoAutorizado         → 0|1
+LicenciaConstruccion.LicenciaFraccionamiento → 0|1
+LicenciaConstruccion.Escrituras              → 0|1
+LicenciaConstruccion.FactibilidadAguaPotable → 0|1
+LicenciaConstruccion.RecibosPagoPredial      → 0|1
+LicenciaConstruccion.RecibosMunicipales      → 0|1
+LicenciaConstruccion.PlanoArquitectonicos    → 0|1
+LicenciaConstruccion.Otros                   → 0|1
 LicenciaConstruccion.Corresponsables[0].NombreCompleto
 LicenciaConstruccion.Corresponsables[0].NoRegLicenciaConstruccion
 LicenciaConstruccion.Corresponsables[0].CedulaProfesional
@@ -106,28 +118,40 @@ LicenciaConstruccion.Corresponsables[0].CedulaProfesional
 Índices: `0`, `1`, `2`…  
 No envíes `Id` ni `IdLicenciaConstruccion` del corresponsable.
 
-### Firmas (máx. 1)
+### Archivos LC (máx. 1 por campo) → `FotosLicenciaConstruccion`
 
 | Campo form | IdTipoFoto |
 |------------|------------|
+| `LicenciaConstruccion.constanciaAlineamiento` | 10 |
+| `LicenciaConstruccion.constanciaNumero` | 29 |
+| `LicenciaConstruccion.LicenciaUsoSuelo` | 11 |
+| `LicenciaConstruccion.PlanoAutorizado` | 12 |
+| `LicenciaConstruccion.LicenciaFraccionamiento` | 13 |
+| `LicenciaConstruccion.ConstanciaPropietario` | 14 |
+| `LicenciaConstruccion.Factibilidad` | 15 |
+| `LicenciaConstruccion.RecibosImpuestoPredial` | 16 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos1` | 17 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos2` | 31 |
+| `LicenciaConstruccion.JuegoDePlanosArquitectonicos3` | 32 |
+| `LicenciaConstruccion.otros` | 18 |
 | `LicenciaConstruccion.FirmaPropietario` | 25 |
 | `LicenciaConstruccion.FirmaDRO` | 26 |
 | `LicenciaConstruccion.FirmaCorresponsable` | 27 |
 | `LicenciaConstruccion.FirmaResponsableRecepcionDocumento` | 28 |
 
-### Documentos (múltiples por campo)
+**Obsoletos (no usar):** `constanciaAlineamientoyNumero`, `LicenciaUsoyPlano`, `JuegoDePlanosArquitectonicos` (multi).
 
-| Campo form | IdTipoFoto |
-|------------|------------|
-| `LicenciaConstruccion.constanciaAlineamientoyNumero` | 10 |
-| `LicenciaConstruccion.LicenciaUsoyPlano` | 11 |
-| `LicenciaConstruccion.ConstanciaPropietario` | 14 |
-| `LicenciaConstruccion.Factibilidad` | 15 |
-| `LicenciaConstruccion.RecibosImpuestoPredial` | 16 |
-| `LicenciaConstruccion.JuegoDePlanosArquitectonicos` | 17 |
-| `LicenciaConstruccion.otros` | 18 |
+### Transversales con PredioObra = 1
 
-No envíes Sapac/Catastro/Licencias/ProteccionCivil en este flujo.
+Puedes enviar también:
+
+```text
+Licencias.fachada
+Licencias.estacionamiento
+Licencias.bodega
+```
+
+Se guardan en `Fotos` (6/7/8). No envíes el resto de `Licencias.*` textuales en este flujo (se ignoran).
 
 ---
 
@@ -136,7 +160,7 @@ No envíes Sapac/Catastro/Licencias/ProteccionCivil en este flujo.
 ```typescript
 // registros-api.service.ts
 import { Injectable, inject } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../environments/environment';
 
@@ -167,7 +191,7 @@ export interface CreateRegistroResponse {
 @Injectable({ providedIn: 'root' })
 export class RegistrosApiService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = environment.apiUrl; // ej. https://api.ejemplo.com
+  private readonly baseUrl = environment.apiUrl;
 
   crearRegistro(formData: FormData): Observable<CreateRegistroResponse> {
     // No pongas Content-Type manualmente: el browser agrega el boundary.
@@ -177,26 +201,6 @@ export class RegistrosApiService {
     );
   }
 }
-```
-
-El interceptor de auth debe adjuntar el Bearer:
-
-```typescript
-// auth.interceptor.ts (ejemplo)
-import { HttpInterceptorFn } from '@angular/common/http';
-import { inject } from '@angular/core';
-import { AuthTokenService } from './auth-token.service';
-
-export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const token = inject(AuthTokenService).accessToken;
-  if (!token) return next(req);
-
-  return next(
-    req.clone({
-      setHeaders: { Authorization: `Bearer ${token}` },
-    }),
-  );
-};
 ```
 
 ---
@@ -209,33 +213,13 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
 type Scalar = string | number | null | undefined;
 type FileInput = File | null | undefined;
 
-function appendIfPresent(
-  fd: FormData,
-  key: string,
-  value: Scalar,
-): void {
-  // Omitir undefined: el backend no actualiza/crea con ese campo.
-  // '' se puede enviar si quieres limpiar strings opcionales (el backend lo normaliza).
+function appendIfPresent(fd: FormData, key: string, value: Scalar): void {
   if (value === undefined || value === null) return;
   fd.append(key, String(value));
 }
 
-function appendFile(
-  fd: FormData,
-  key: string,
-  file: FileInput,
-): void {
+function appendFile(fd: FormData, key: string, file: FileInput): void {
   if (file) fd.append(key, file, file.name);
-}
-
-function appendFiles(
-  fd: FormData,
-  key: string,
-  files: File[] | null | undefined,
-): void {
-  for (const file of files ?? []) {
-    fd.append(key, file, file.name);
-  }
 }
 
 export interface RegistroCreateFormModel {
@@ -252,7 +236,6 @@ export interface RegistroCreateFormModel {
   NoExterior?: string | null;
   CP?: string | null;
 
-  // PredioObra = 0
   sapac?: Record<string, Scalar>;
   catastro?: Record<string, Scalar>;
   licencias?: Record<string, Scalar>;
@@ -271,33 +254,40 @@ export interface RegistroCreateFormModel {
     'ProteccionCivil.vistoBueno'?: FileInput;
   };
 
-  // PredioObra = 1
   licenciaConstruccion?: Record<string, Scalar>;
   corresponsables?: Array<{
     NombreCompleto?: string;
     NoRegLicenciaConstruccion?: string;
     CedulaProfesional?: string;
   }>;
-  firmas?: {
+  /** Un archivo por IdTipoFoto (máx. 1). Incluye firmas y documentos. */
+  archivosLc?: {
+    'LicenciaConstruccion.constanciaAlineamiento'?: FileInput;
+    'LicenciaConstruccion.constanciaNumero'?: FileInput;
+    'LicenciaConstruccion.LicenciaUsoSuelo'?: FileInput;
+    'LicenciaConstruccion.PlanoAutorizado'?: FileInput;
+    'LicenciaConstruccion.LicenciaFraccionamiento'?: FileInput;
+    'LicenciaConstruccion.ConstanciaPropietario'?: FileInput;
+    'LicenciaConstruccion.Factibilidad'?: FileInput;
+    'LicenciaConstruccion.RecibosImpuestoPredial'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos1'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos2'?: FileInput;
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos3'?: FileInput;
+    'LicenciaConstruccion.otros'?: FileInput;
     'LicenciaConstruccion.FirmaPropietario'?: FileInput;
     'LicenciaConstruccion.FirmaDRO'?: FileInput;
     'LicenciaConstruccion.FirmaCorresponsable'?: FileInput;
     'LicenciaConstruccion.FirmaResponsableRecepcionDocumento'?: FileInput;
   };
-  documentosLc?: {
-    'LicenciaConstruccion.constanciaAlineamientoyNumero'?: File[];
-    'LicenciaConstruccion.LicenciaUsoyPlano'?: File[];
-    'LicenciaConstruccion.ConstanciaPropietario'?: File[];
-    'LicenciaConstruccion.Factibilidad'?: File[];
-    'LicenciaConstruccion.RecibosImpuestoPredial'?: File[];
-    'LicenciaConstruccion.JuegoDePlanosArquitectonicos'?: File[];
-    'LicenciaConstruccion.otros'?: File[];
+  /** Transversales: válidos también con PredioObra = 1 */
+  archivosTransversales?: {
+    'Licencias.fachada'?: FileInput;
+    'Licencias.estacionamiento'?: FileInput;
+    'Licencias.bodega'?: FileInput;
   };
 }
 
-export function buildRegistroFormData(
-  model: RegistroCreateFormModel,
-): FormData {
+export function buildRegistroFormData(model: RegistroCreateFormModel): FormData {
   const fd = new FormData();
 
   appendIfPresent(fd, 'Latitud', model.Latitud);
@@ -341,7 +331,6 @@ export function buildRegistroFormData(
     for (const [k, v] of Object.entries(model.licenciaConstruccion ?? {})) {
       appendIfPresent(fd, `LicenciaConstruccion.${k}`, v);
     }
-
     (model.corresponsables ?? []).forEach((item, i) => {
       appendIfPresent(
         fd,
@@ -359,12 +348,11 @@ export function buildRegistroFormData(
         item.CedulaProfesional,
       );
     });
-
-    for (const [key, file] of Object.entries(model.firmas ?? {})) {
+    for (const [key, file] of Object.entries(model.archivosLc ?? {})) {
       appendFile(fd, key, file as FileInput);
     }
-    for (const [key, files] of Object.entries(model.documentosLc ?? {})) {
-      appendFiles(fd, key, files as File[]);
+    for (const [key, file] of Object.entries(model.archivosTransversales ?? {})) {
+      appendFile(fd, key, file as FileInput);
     }
   }
 
@@ -374,86 +362,39 @@ export function buildRegistroFormData(
 
 ---
 
-## Uso en un componente / signal store
+## Ejemplo de uso
 
 ```typescript
-import { inject } from '@angular/core';
-import { RegistrosApiService } from './registros-api.service';
-import { buildRegistroFormData } from './build-registro-form-data';
-
-// Ejemplo PredioObra = 0
-const api = inject(RegistrosApiService);
-
 const formData = buildRegistroFormData({
   Latitud: 18.9530959,
   Longitud: -99.2353385,
-  TipoRegistro: 0,
-  PredioObra: 0,
+  TipoRegistro: 1,
+  PredioObra: 1,
   Municipio: 'Cuernavaca',
-  Colonia: 'Centro',
-  Calle: 'Avenida Universidad',
-  NoExterior: '100',
-  CP: '62000',
-  sapac: {
-    NumeroCuenta: '123456',
-    IdTipoServicio: 1,
-    Medidor: 'ABC-01',
+  licenciaConstruccion: {
+    TipoSolicitudLicencia: 2,
+    DescripcionProyecto: 'Construcción de vivienda',
+    NumeroExpediente: 'EXP-2026-001',
+    SeguimientoObra: 'En revisión',
+    ConstanciaAlineamiento: 1,
+    LicenciaUsoSuelo: 0,
   },
-  licencias: {
-    NombreComercial: 'Comercio Ejemplo',
-    TipoPersona: 1,
+  corresponsables: [{ NombreCompleto: 'Arq Uno', CedulaProfesional: '123' }],
+  archivosLc: {
+    'LicenciaConstruccion.constanciaAlineamiento': constanciaFile,
+    'LicenciaConstruccion.constanciaNumero': numeroOficialFile,
+    'LicenciaConstruccion.JuegoDePlanosArquitectonicos1': plano1File,
+    'LicenciaConstruccion.FirmaPropietario': firmaFile,
   },
-  contacto: {
-    Nombre: 'Juan',
-    Telefono: '7771234567',
-  },
-  proteccionCivil: {
-    EsEmpresa: 1,
-    TienePrograma: 0,
-  },
-  archivosPredio0: {
-    'Licencias.fachada': fachadaFile, // File desde <input type="file">
-    'Sapac.reciboSapac': reciboFile,
+  archivosTransversales: {
+    'Licencias.fachada': fachadaFile,
   },
 });
 
 api.crearRegistro(formData).subscribe({
-  next: (res) => {
-    console.log('Creado id=', res.data.id);
-  },
-  error: (err) => {
-    // 400 validación, 401 token, 413 archivo grande, etc.
-    console.error(err?.error ?? err);
-  },
+  next: (res) => console.log('Creado id=', res.data.id),
+  error: (err) => console.error(err?.error ?? err),
 });
-```
-
-### Input de archivos
-
-```html
-<input
-  type="file"
-  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-  (change)="onFachada($event)"
-/>
-```
-
-```typescript
-onFachada(event: Event): void {
-  const input = event.target as HTMLInputElement;
-  this.fachadaFile = input.files?.[0] ?? null;
-}
-```
-
-Para documentos múltiples (`PredioObra = 1`):
-
-```html
-<input
-  type="file"
-  multiple
-  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-  (change)="onDocumentos($event)"
-/>
 ```
 
 ---
@@ -462,47 +403,11 @@ Para documentos múltiples (`PredioObra = 1`):
 
 | Error | Causa típica |
 |------|---------------|
-| `400` PredioObra / TipoRegistro | Enviar `"true"`/`"false"` o valores fuera de `0|1` |
-| `400` campo no reconocido | JSON anidado o nombres distintos a los del contrato |
-| `400` fotos SAPAC con PredioObra=1 | Mezclar flujos |
-| `400` firmas con PredioObra=0 | Mezclar flujos |
+| `400` PredioObra / TipoRegistro | Enviar `"true"`/`"false"` o valores fuera de `0\|1` |
+| `400` campo no reconocido | Nombres antiguos multi-archivo o JSON anidado |
+| `400` fotos SAPAC con PredioObra=1 | Mezclar flujos (excepto fachada/estacionamiento/bodega) |
+| `400` más de un archivo en un campo LC | Enviar `multiple` en un input de LC |
 | `401` | Token ausente o expirado |
-| Archivo rechazado | MIME distinto a JPG/PNG/PDF o tamaño excedido |
-
----
-
-## Respuesta 201 (ejemplo)
-
-```json
-{
-  "status": "success",
-  "message": "Registro creado correctamente",
-  "data": {
-    "id": 25,
-    "nombre": "",
-    "idCapturistaVisita": 12,
-    "idSapac": 8,
-    "idCatastro": 5,
-    "idLicencia": 9,
-    "contacto": {
-      "id": 3,
-      "nombre": "Juan",
-      "apellidoPaterno": null,
-      "apellidoMaterno": null,
-      "telefono": "7771234567",
-      "correo": null
-    },
-    "idProteccionCivil": 4,
-    "contactoRepresentante": null,
-    "fotos": [
-      { "id": 100, "idTipoFoto": 6, "ruta": "https://.../25/6/uuid.jpg" }
-    ],
-    "idLicenciaConstruccion": null,
-    "corresponsables": [],
-    "fotosLicenciaConstruccion": []
-  }
-}
-```
 
 ---
 
@@ -511,16 +416,17 @@ Para documentos múltiples (`PredioObra = 1`):
 - [ ] Usar `FormData`, no `JSON.stringify`
 - [ ] No fijar `Content-Type` a mano
 - [ ] Enviar Bearer JWT
-- [ ] Mandar `TipoRegistro` / `PredioObra` como `0` o `1` (number o string numérico)
-- [ ] Separar UI/campos según `PredioObra`
-- [ ] Archivos con el **nombre exacto** del campo (`Licencias.fachada`, etc.)
-- [ ] Corresponsables indexados: `LicenciaConstruccion.Corresponsables[i].*`
-- [ ] No enviar capturista, grupo, estatus ni ids internos de relaciones
+- [ ] `TipoRegistro` / `PredioObra` como `0` o `1`
+- [ ] Un archivo por campo LC (sin `multiple` en esos inputs)
+- [ ] Nombres nuevos: `constanciaAlineamiento`, `constanciaNumero`, `JuegoDePlanosArquitectonicos1|2|3`
+- [ ] Transversales 6/7/8 permitidos con PredioObra = 1
+- [ ] No enviar capturista, grupo, estatus ni ids internos
 
 ---
 
 ## Referencia backend
 
 - Controller: `src/registros/registros.controller.ts` → `POST /registros`
+- Constantes: `src/registros/licencia-construccion.constants.ts` → `LC_FILE_TIPO_FOTO`
 - Parser: `src/registros/registro-form.parser.ts`
-- Servicio: `src/registros/registros.service.ts` → `createFromMultipart`
+- Servicio: `src/registros/registros.service.ts`

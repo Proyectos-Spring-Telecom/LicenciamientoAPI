@@ -7,8 +7,7 @@ import {
 import {
   CORRESPONSABLE_SCALAR_ATTRS,
   CORRESPONSABLES_INDEXED_RE,
-  FIRMA_FIELD_NAMES,
-  LC_DOCUMENTO_FIELD_NAMES,
+  LC_FILE_FIELD_NAMES,
   LC_SCALAR_ATTRS,
 } from 'src/registros/licencia-construccion.constants';
 import {
@@ -128,9 +127,16 @@ const CORRESPONSABLE_UPDATE_ATTRS = new Set([
 ]);
 
 const LC_FILE_FORM_KEYS = new Set<string>([
-  ...Object.values(FIRMA_FIELD_NAMES),
-  ...Object.values(LC_DOCUMENTO_FIELD_NAMES),
+  ...Object.values(LC_FILE_FIELD_NAMES),
 ]);
+
+/** Solo nombres exclusivos de archivo: no descartar del body los tinyint homónimos. */
+const LC_FILE_ONLY_FORM_KEYS = new Set(
+  [...LC_FILE_FORM_KEYS].filter(
+    (name) =>
+      !LC_SCALAR_ATTRS.has(name.slice('LicenciaConstruccion.'.length)),
+  ),
+);
 
 export type ParsedRegistroActualizarForm = {
   registro: ActualizarRegistroDto;
@@ -179,8 +185,10 @@ export async function parseRegistroActualizarMultipart(
       continue;
     }
 
-    if (LC_FILE_FORM_KEYS.has(key)) {
-      // Firmas/documentos: etapa posterior; no error ni procesamiento.
+    if (LC_FILE_ONLY_FORM_KEYS.has(key)) {
+      // Firmas/documentos exclusivos: etapa posterior; no error ni procesamiento.
+      // LicenciaUsoSuelo/PlanoAutorizado/LicenciaFraccionamiento pueden venir
+      // también como tinyint en el body y deben llegar al DTO.
       continue;
     }
 

@@ -14,7 +14,7 @@ import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
 import { TipoFoto } from 'src/entities/TipoFoto';
 import { Fotos } from 'src/entities/Fotos';
-import { FIRMA_FIELD_NAMES } from 'src/registros/licencia-construccion.constants';
+import { LC_FILE_FIELD_NAMES } from 'src/registros/licencia-construccion.constants';
 import { LicenciaConstruccionStorageService } from 'src/registros/licencia-construccion-storage.service';
 import { SAPAC_FILE_FIELD_NAMES } from 'src/registros/sapac.constants';
 import { SapacStorageService } from 'src/registros/sapac-storage.service';
@@ -266,7 +266,8 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
         : options.licenciaConstruccion;
     const corresponsablesList = options?.corresponsables ?? [];
     const tipoFotoIds = options?.tipoFotoIds ?? [
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 25, 26, 27, 28,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 25, 26,
+      27, 28, 29, 31, 32,
     ];
 
     const saved: unknown[] = [];
@@ -319,9 +320,8 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     } as unknown as DataSource;
 
     const storageService = {
-      assertValidFirmaFiles: jest.fn(),
-      assertValidDocumentoFiles: jest.fn(),
-      saveFirmas: jest.fn().mockResolvedValue({
+      assertValidLcFiles: jest.fn(),
+      saveLcFiles: jest.fn().mockResolvedValue({
         saved: [
           {
             key: 'FirmaPropietario',
@@ -332,18 +332,6 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
           },
         ],
         absoluteCreated: ['/tmp/10/25/uuid.png'],
-      }),
-      saveDocumentoArrays: jest.fn().mockResolvedValue({
-        saved: [
-          {
-            key: 'Factibilidad',
-            idTipoFoto: 15,
-            fileName: 'a.pdf',
-            absolutePath: '/tmp/10/15/a.pdf',
-            publicUrl: 'https://cdn.example/registros/data/10/15/a.pdf',
-          },
-        ],
-        absoluteCreated: ['/tmp/10/15/a.pdf'],
       }),
       cleanup: jest.fn().mockResolvedValue(undefined),
     } as unknown as LicenciaConstruccionStorageService;
@@ -858,13 +846,13 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     const result = await service.updateFromMultipart(
       { idRegistro: '10' },
       {
-        [FIRMA_FIELD_NAMES.FirmaPropietario]: [
-          fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+        [LC_FILE_FIELD_NAMES.FirmaPropietario]: [
+          fakePng(LC_FILE_FIELD_NAMES.FirmaPropietario),
         ],
       },
     );
 
-    expect(storageService.saveFirmas).toHaveBeenCalled();
+    expect(storageService.saveLcFiles).toHaveBeenCalled();
     expect(manager.create).toHaveBeenCalledWith(
       LicenciaConstruccion,
       expect.objectContaining({ idRegistro: 10 }),
@@ -879,26 +867,155 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     expect(result.data).toEqual(
       expect.objectContaining({
         fotosLicenciaConstruccion: [
-          expect.objectContaining({ idTipoFoto: 25 }),
+          expect.objectContaining({
+            idTipoFoto: 25,
+            accion: 'creada',
+          }),
         ],
       }),
     );
     expect(registro.estatus).toBe(4);
   });
 
-  it('ignora firmas cuando PredioObra efectivo es 0', async () => {
+  it('reemplaza solo Ruta cuando ya existe fila del mismo tipo (conserva Id)', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const existente = {
+      id: 100,
+      idLicenciaConstruccion: 20,
+      idTipoFoto: 12,
+      ruta: 'https://cdn.example/registros/data/10/12/plano-anterior.pdf',
+      fechaHora: new Date('2020-01-01'),
+    } as FotosLicenciaConstruccion;
+
+    const { service, manager, storageService } = createService({
+      registro,
+      licenciaConstruccion: {
+        id: 20,
+        idRegistro: 10,
+      } as LicenciaConstruccion,
+    });
+
+    (storageService.saveLcFiles as jest.Mock).mockResolvedValue({
+      saved: [
+        {
+          key: 'PlanoAutorizado',
+          idTipoFoto: 12,
+          fileName: 'uuid-nuevo.pdf',
+          absolutePath: '/tmp/10/12/uuid-nuevo.pdf',
+          publicUrl:
+            'https://cdn.example/registros/data/10/12/uuid-nuevo.pdf',
+        },
+      ],
+      absoluteCreated: ['/tmp/10/12/uuid-nuevo.pdf'],
+    });
+
+    (manager.find as jest.Mock).mockImplementation(async (entity) => {
+      if (entity === FotosLicenciaConstruccion) {
+        return [existente];
+      }
+      return [];
+    });
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [LC_FILE_FIELD_NAMES.PlanoAutorizado]: [
+          fakePng(LC_FILE_FIELD_NAMES.PlanoAutorizado),
+        ],
+      },
+    );
+
+    expect(existente.id).toBe(100);
+    expect(existente.ruta).toBe(
+      'https://cdn.example/registros/data/10/12/uuid-nuevo.pdf',
+    );
+    expect(manager.create).not.toHaveBeenCalledWith(
+      FotosLicenciaConstruccion,
+      expect.anything(),
+    );
+    expect(storageService.cleanup).not.toHaveBeenCalled();
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotosLicenciaConstruccion: [
+          expect.objectContaining({
+            id: 100,
+            idTipoFoto: 12,
+            accion: 'actualizada',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('crea fila constanciaNumero (29) cuando no existe', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, manager, storageService } = createService({
+      registro,
+      licenciaConstruccion: {
+        id: 20,
+        idRegistro: 10,
+      } as LicenciaConstruccion,
+    });
+
+    (storageService.saveLcFiles as jest.Mock).mockResolvedValue({
+      saved: [
+        {
+          key: 'constanciaNumero',
+          idTipoFoto: 29,
+          fileName: 'uuid.pdf',
+          absolutePath: '/tmp/10/29/uuid.pdf',
+          publicUrl: 'https://cdn.example/registros/data/10/29/uuid.pdf',
+        },
+      ],
+      absoluteCreated: ['/tmp/10/29/uuid.pdf'],
+    });
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [LC_FILE_FIELD_NAMES.constanciaNumero]: [
+          fakePng(LC_FILE_FIELD_NAMES.constanciaNumero),
+        ],
+      },
+    );
+
+    expect(manager.create).toHaveBeenCalledWith(
+      FotosLicenciaConstruccion,
+      expect.objectContaining({ idTipoFoto: 29 }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotosLicenciaConstruccion: [
+          expect.objectContaining({
+            idTipoFoto: 29,
+            accion: 'creada',
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('ignora archivos LC cuando PredioObra efectivo es 0', async () => {
     const { service, storageService } = createService();
 
     await service.updateFromMultipart(
       { idRegistro: '10', Calle: 'X' },
       {
-        [FIRMA_FIELD_NAMES.FirmaPropietario]: [
-          fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+        [LC_FILE_FIELD_NAMES.FirmaPropietario]: [
+          fakePng(LC_FILE_FIELD_NAMES.FirmaPropietario),
         ],
       },
     );
 
-    expect(storageService.saveFirmas).not.toHaveBeenCalled();
+    expect(storageService.saveLcFiles).not.toHaveBeenCalled();
   });
 
   it('no ejecuta cleanup físico si falla la BD tras guardar disco (PO=1)', async () => {
@@ -924,14 +1041,104 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
       service.updateFromMultipart(
         { idRegistro: '10' },
         {
-          [FIRMA_FIELD_NAMES.FirmaPropietario]: [
-            fakePng(FIRMA_FIELD_NAMES.FirmaPropietario),
+          [LC_FILE_FIELD_NAMES.FirmaPropietario]: [
+            fakePng(LC_FILE_FIELD_NAMES.FirmaPropietario),
           ],
         },
       ),
     ).rejects.toThrow('foto fail');
 
     expect(storageService.cleanup).not.toHaveBeenCalled();
+  });
+
+  it('solicitud solo con archivo es válida (crea LC mínima)', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, storageService } = createService({
+      registro,
+      licenciaConstruccion: null,
+    });
+
+    await expect(
+      service.updateFromMultipart(
+        { idRegistro: '10' },
+        {
+          [LC_FILE_FIELD_NAMES.FirmaDRO]: [
+            fakePng(LC_FILE_FIELD_NAMES.FirmaDRO),
+          ],
+        },
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({ status: 'success' }),
+    );
+    expect(storageService.saveLcFiles).toHaveBeenCalled();
+  });
+
+  it('con duplicados históricos actualiza solo la fila de Id mayor', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const vieja = {
+      id: 50,
+      idLicenciaConstruccion: 20,
+      idTipoFoto: 12,
+      ruta: 'old-1.pdf',
+    } as FotosLicenciaConstruccion;
+    const reciente = {
+      id: 100,
+      idLicenciaConstruccion: 20,
+      idTipoFoto: 12,
+      ruta: 'old-2.pdf',
+    } as FotosLicenciaConstruccion;
+
+    const { service, manager, storageService } = createService({
+      registro,
+      licenciaConstruccion: {
+        id: 20,
+        idRegistro: 10,
+      } as LicenciaConstruccion,
+    });
+
+    (storageService.saveLcFiles as jest.Mock).mockResolvedValue({
+      saved: [
+        {
+          key: 'PlanoAutorizado',
+          idTipoFoto: 12,
+          fileName: 'nuevo.pdf',
+          absolutePath: '/tmp/10/12/nuevo.pdf',
+          publicUrl: 'https://cdn.example/registros/data/10/12/nuevo.pdf',
+        },
+      ],
+      absoluteCreated: ['/tmp/10/12/nuevo.pdf'],
+    });
+
+    (manager.find as jest.Mock).mockResolvedValue([reciente, vieja]);
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [LC_FILE_FIELD_NAMES.PlanoAutorizado]: [
+          fakePng(LC_FILE_FIELD_NAMES.PlanoAutorizado),
+        ],
+      },
+    );
+
+    expect(reciente.ruta).toBe(
+      'https://cdn.example/registros/data/10/12/nuevo.pdf',
+    );
+    expect(vieja.ruta).toBe('old-1.pdf');
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotosLicenciaConstruccion: [
+          expect.objectContaining({ id: 100, accion: 'actualizada' }),
+        ],
+      }),
+    );
   });
 
   it('crea Foto nueva (IdTipoFoto 3) y Sapac si solo se envía archivo', async () => {
@@ -1040,6 +1247,122 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     expect(sapacStorageService.saveRegistroPhotos).not.toHaveBeenCalled();
   });
 
+  it('procesa Licencias.fachada con PredioObra = 1 sin crear Licencias ni tocar sus datos', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const { service, manager, sapacStorageService } = createService({
+      registro,
+    });
+
+    (sapacStorageService.saveRegistroPhotos as jest.Mock).mockResolvedValue({
+      saved: [
+        {
+          key: 'Licencias.fachada',
+          idTipoFoto: 6,
+          fileName: 'fachada.jpg',
+          absolutePath: '/tmp/10/6/fachada.jpg',
+          publicUrl: 'https://cdn.example/registros/data/10/6/fachada.jpg',
+        },
+      ],
+      absoluteCreated: ['/tmp/10/6/fachada.jpg'],
+    });
+    (manager.find as jest.Mock).mockResolvedValue([]);
+
+    const result = await service.updateFromMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.NombreComercial': 'No debe aplicar',
+      },
+      {
+        'Licencias.fachada': [fakePng('Licencias.fachada')],
+      },
+    );
+
+    expect(sapacStorageService.saveRegistroPhotos).toHaveBeenCalled();
+    expect(manager.create).not.toHaveBeenCalledWith(
+      Licencias,
+      expect.anything(),
+    );
+    expect(manager.create).toHaveBeenCalledWith(
+      Fotos,
+      expect.objectContaining({
+        idRegistro: 10,
+        idTipoFoto: 6,
+        ruta: 'https://cdn.example/registros/data/10/6/fachada.jpg',
+      }),
+    );
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        idLicencia: null,
+        fotos: [
+          expect.objectContaining({ idTipoFoto: 6, accion: 'creada' }),
+        ],
+      }),
+    );
+  });
+
+  it('actualiza Ruta de fachada existente con PredioObra = 1 (conserva Id)', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const fotoExistente = {
+      id: 200,
+      idRegistro: 10,
+      idTipoFoto: 7,
+      ruta: 'https://cdn.example/registros/data/10/7/anterior.jpg',
+    } as Fotos;
+    const { service, manager, sapacStorageService } = createService({
+      registro,
+    });
+
+    (sapacStorageService.saveRegistroPhotos as jest.Mock).mockResolvedValue({
+      saved: [
+        {
+          key: 'Licencias.estacionamiento',
+          idTipoFoto: 7,
+          fileName: 'nuevo.jpg',
+          absolutePath: '/tmp/10/7/nuevo.jpg',
+          publicUrl: 'https://cdn.example/registros/data/10/7/nuevo.jpg',
+        },
+      ],
+      absoluteCreated: ['/tmp/10/7/nuevo.jpg'],
+    });
+    (manager.find as jest.Mock).mockImplementation(async (entity) => {
+      if (entity === Fotos) return [fotoExistente];
+      return [];
+    });
+
+    const result = await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        'Licencias.estacionamiento': [fakePng('Licencias.estacionamiento')],
+      },
+    );
+
+    expect(fotoExistente.id).toBe(200);
+    expect(fotoExistente.ruta).toBe(
+      'https://cdn.example/registros/data/10/7/nuevo.jpg',
+    );
+    expect(manager.create).not.toHaveBeenCalledWith(Fotos, expect.anything());
+    expect(sapacStorageService.cleanup).not.toHaveBeenCalled();
+    expect(result.data).toEqual(
+      expect.objectContaining({
+        fotos: [
+          expect.objectContaining({
+            id: 200,
+            idTipoFoto: 7,
+            accion: 'actualizada',
+          }),
+        ],
+      }),
+    );
+  });
+
   it('acepta solo archivos cuando PredioObra omitido y almacenado es 1', async () => {
     const registro = {
       id: 10,
@@ -1054,10 +1377,12 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     await service.updateFromMultipart(
       { idRegistro: '10' },
       {
-        [FIRMA_FIELD_NAMES.FirmaDRO]: [fakePng(FIRMA_FIELD_NAMES.FirmaDRO)],
+        [LC_FILE_FIELD_NAMES.FirmaDRO]: [
+          fakePng(LC_FILE_FIELD_NAMES.FirmaDRO),
+        ],
       },
     );
 
-    expect(storageService.saveFirmas).toHaveBeenCalled();
+    expect(storageService.saveLcFiles).toHaveBeenCalled();
   });
 });

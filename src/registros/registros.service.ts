@@ -54,10 +54,9 @@ import {
   buildStartDateLocal,
 } from './registro-date-range';
 import {
-  FIRMA_TIPO_FOTO,
-  FirmaKey,
-  LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
-  LcDocumentoKey,
+  LC_FILE_FIELD_NAMES,
+  LC_FILE_KEYS,
+  LC_FILE_TIPO_FOTO,
 } from './licencia-construccion.constants';
 import {
   hasContactoData,
@@ -65,8 +64,7 @@ import {
   isEmptyFormDataValue,
 } from './licencia-construccion.sanitize';
 import {
-  FirmaFiles,
-  LcDocumentoFiles,
+  LcFiles,
   LicenciaConstruccionStorageService,
 } from './licencia-construccion-storage.service';
 import {
@@ -961,8 +959,7 @@ export class RegistrosService {
 
     const parsed = await parseRegistroMultipart(body, uploaded);
 
-    this.storageService.assertValidFirmaFiles(parsed.firmas);
-    this.storageService.assertValidDocumentoFiles(parsed.documentosLc);
+    this.storageService.assertValidLcFiles(parsed.archivosLc);
     this.sapacStorageService.assertValidFiles(parsed.fotosSapac);
     this.sapacStorageService.assertValidPhotoInputs(
       this.buildCatastroPhotoInputs(parsed.fotosCatastro),
@@ -973,8 +970,7 @@ export class RegistrosService {
     this.sapacStorageService.assertValidPhotoInputs(
       this.buildProteccionCivilPhotoInputs(parsed.fotosProteccionCivil),
     );
-    await this.assertTipoFotoCatalog(parsed.firmas);
-    await this.assertDocumentoTipoFotoCatalog(parsed.documentosLc);
+    await this.assertLcFileTipoFotoCatalog(parsed.archivosLc);
     await this.assertSapacTipoFotoCatalog(parsed.fotosSapac);
     await this.assertCatastroTipoFotoCatalog(parsed.fotosCatastro);
     await this.assertLicenciasTipoFotoCatalog(parsed.fotosLicencias);
@@ -991,8 +987,7 @@ export class RegistrosService {
       parsed.contacto,
       parsed.proteccionCivil,
       parsed.contactoRepresentante,
-      parsed.firmas,
-      parsed.documentosLc,
+      parsed.archivosLc,
       parsed.fotosSapac,
       parsed.fotosCatastro,
       parsed.fotosLicencias,
@@ -1016,8 +1011,7 @@ export class RegistrosService {
     contactoDto: CreateContactoDto | undefined,
     proteccionCivilDto: CreateProteccionCivilDto | undefined,
     contactoRepresentanteDto: CreateContactoRepresentanteDto | undefined,
-    firmas: FirmaFiles,
-    documentosLc: LcDocumentoFiles,
+    archivosLc: LcFiles,
     fotosSapac: SapacFotoFiles,
     fotosCatastro: CatastroFotoFiles,
     fotosLicencias: LicenciasFotoFiles,
@@ -1033,10 +1027,7 @@ export class RegistrosService {
     const licenciaCreatedFiles: string[] = [];
     const fotosRegistrosCreatedFiles: string[] = [];
     let committed = false;
-    const hasFirmas = Object.keys(firmas).length > 0;
-    const hasDocumentosLc = Object.values(documentosLc).some(
-      (list) => (list?.length ?? 0) > 0,
-    );
+    const hasArchivosLc = LC_FILE_KEYS.some((key) => archivosLc[key]);
     const hasFotosSapac = Object.keys(fotosSapac).length > 0;
     const hasFotosCatastro = Object.keys(fotosCatastro).length > 0;
     const hasFotosLicencias = Object.keys(fotosLicencias).length > 0;
@@ -1045,7 +1036,7 @@ export class RegistrosService {
     const predioObraCero =
       crearSapac || crearCatastro || crearLicencia || crearProteccionCivil;
 
-    if (predioObraCero && (hasFirmas || hasDocumentosLc)) {
+    if (predioObraCero && hasArchivosLc) {
       throw new BadRequestException(
         'No se pueden registrar archivos de LicenciaConstruccion cuando PredioObra es 0.',
       );
@@ -1411,7 +1402,7 @@ export class RegistrosService {
           }
         }
 
-        if (hasFirmas || hasDocumentosLc) {
+        if (hasArchivosLc) {
           if (idLicenciaConstruccion == null) {
             throw new BadRequestException(
               'No se pueden registrar archivos de LicenciaConstruccion cuando PredioObra es 0.',
@@ -1421,53 +1412,26 @@ export class RegistrosService {
           const fotosResultado: FotoLicenciaResultado[] = [];
           const ahora = new Date();
 
-          if (hasFirmas) {
-            const { saved, absoluteCreated } =
-              await this.storageService.saveFirmas(idRegistro, firmas);
-            licenciaCreatedFiles.push(...absoluteCreated);
+          // Un campo → un archivo → un IdTipoFoto → una fila.
+          const { saved, absoluteCreated } =
+            await this.storageService.saveLcFiles(idRegistro, archivosLc);
+          licenciaCreatedFiles.push(...absoluteCreated);
 
-            for (const item of saved) {
-              const foto = await manager.save(
-                FotosLicenciaConstruccion,
-                manager.create(FotosLicenciaConstruccion, {
-                  idLicenciaConstruccion,
-                  ruta: item.publicUrl,
-                  fechaHora: ahora,
-                  idTipoFoto: item.idTipoFoto,
-                }),
-              );
-              fotosResultado.push({
-                id: Number(foto.id),
-                idTipoFoto: item.idTipoFoto,
+          for (const item of saved) {
+            const foto = await manager.save(
+              FotosLicenciaConstruccion,
+              manager.create(FotosLicenciaConstruccion, {
+                idLicenciaConstruccion,
                 ruta: item.publicUrl,
-              });
-            }
-          }
-
-          if (hasDocumentosLc) {
-            const { saved, absoluteCreated } =
-              await this.storageService.saveDocumentoArrays(
-                idRegistro,
-                documentosLc,
-              );
-            licenciaCreatedFiles.push(...absoluteCreated);
-
-            for (const item of saved) {
-              const foto = await manager.save(
-                FotosLicenciaConstruccion,
-                manager.create(FotosLicenciaConstruccion, {
-                  idLicenciaConstruccion,
-                  ruta: item.publicUrl,
-                  fechaHora: ahora,
-                  idTipoFoto: item.idTipoFoto,
-                }),
-              );
-              fotosResultado.push({
-                id: Number(foto.id),
+                fechaHora: ahora,
                 idTipoFoto: item.idTipoFoto,
-                ruta: item.publicUrl,
-              });
-            }
+              }),
+            );
+            fotosResultado.push({
+              id: Number(foto.id),
+              idTipoFoto: item.idTipoFoto,
+              ruta: item.publicUrl,
+            });
           }
 
           data.fotosLicenciaConstruccion = fotosResultado;
@@ -1607,38 +1571,10 @@ export class RegistrosService {
     return items;
   }
 
-  private async assertTipoFotoCatalog(firmas: FirmaFiles): Promise<void> {
-    const requiredIds = (Object.keys(firmas) as FirmaKey[])
-      .filter((k) => firmas[k])
-      .map((k) => FIRMA_TIPO_FOTO[k]);
-
-    if (!requiredIds.length) return;
-
-    const unique = [...new Set(requiredIds)];
-    const found = await this.dataSource.getRepository(TipoFoto).find({
-      where: { id: In(unique) },
-      select: ['id'],
-    });
-    const foundIds = new Set(found.map((t) => Number(t.id)));
-
-    for (const id of unique) {
-      if (!foundIds.has(id)) {
-        const key = (Object.keys(FIRMA_TIPO_FOTO) as FirmaKey[]).find(
-          (k) => FIRMA_TIPO_FOTO[k] === id,
-        );
-        throw new BadRequestException(
-          `El TipoFoto ${id} requerido para ${key ?? 'la firma'} no existe.`,
-        );
-      }
-    }
-  }
-
-  private async assertDocumentoTipoFotoCatalog(
-    files: LcDocumentoFiles,
-  ): Promise<void> {
-    const requiredIds = (Object.keys(files) as LcDocumentoKey[])
-      .filter((key) => (files[key]?.length ?? 0) > 0)
-      .map((key) => LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO[key]);
+  private async assertLcFileTipoFotoCatalog(files: LcFiles): Promise<void> {
+    const requiredIds = LC_FILE_KEYS.filter((key) => files[key]).map(
+      (key) => LC_FILE_TIPO_FOTO[key],
+    );
 
     if (!requiredIds.length) return;
 
@@ -1651,13 +1587,11 @@ export class RegistrosService {
 
     for (const id of unique) {
       if (foundIds.has(id)) continue;
-      const key = (
-        Object.keys(
-          LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
-        ) as LcDocumentoKey[]
-      ).find((item) => LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO[item] === id);
+      const key = LC_FILE_KEYS.find((item) => LC_FILE_TIPO_FOTO[item] === id);
       throw new BadRequestException(
-        `El TipoFoto ${id} requerido para ${key ?? 'el documento de LicenciaConstruccion'} no existe.`,
+        `El TipoFoto ${id} requerido para ${
+          key ? LC_FILE_FIELD_NAMES[key] : 'el archivo de LicenciaConstruccion'
+        } no existe.`,
       );
     }
   }

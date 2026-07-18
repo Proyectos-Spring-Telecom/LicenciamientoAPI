@@ -19,14 +19,13 @@ import { Registros } from 'src/entities/Registros';
 import { Sapac } from 'src/entities/Sapac';
 import { TipoFoto } from 'src/entities/TipoFoto';
 import {
-  FIRMA_TIPO_FOTO,
-  FirmaKey,
-  LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
-  LcDocumentoKey,
+  LC_FILE_FIELD_NAMES,
+  LC_FILE_KEYS,
+  LC_FILE_TIPO_FOTO,
+  LcFileKey,
 } from 'src/registros/licencia-construccion.constants';
 import {
-  FirmaFiles,
-  LcDocumentoFiles,
+  LcFiles,
   LicenciaConstruccionStorageService,
 } from 'src/registros/licencia-construccion-storage.service';
 import {
@@ -138,6 +137,7 @@ type FotoLcResultado = {
   id: number;
   idTipoFoto: number;
   ruta: string;
+  accion: 'creada' | 'actualizada';
 };
 
 type FotoFlujo0Resultado = {
@@ -198,13 +198,9 @@ export class RegistrosActualizarService {
     );
     const fotos0 = parseFotosFlujo0Actualizar(sanitizedFotos0);
 
-    if (lcFiles.hasFirmas) {
-      this.storageService.assertValidFirmaFiles(lcFiles.firmas);
-      await this.assertTipoFotoCatalog(lcFiles.firmas);
-    }
-    if (lcFiles.hasDocumentos) {
-      this.storageService.assertValidDocumentoFiles(lcFiles.documentosLc);
-      await this.assertDocumentoTipoFotoCatalog(lcFiles.documentosLc);
+    if (lcFiles.hasArchivosLc) {
+      this.storageService.assertValidLcFiles(lcFiles.archivosLc);
+      await this.assertLcFileTipoFotoCatalog(lcFiles.archivosLc);
     }
     if (fotos0.hasFotos) {
       this.sapacStorageService.assertValidPhotoInputs(fotos0.photoInputs);
@@ -221,8 +217,7 @@ export class RegistrosActualizarService {
       parsed.hasContactoRepresentante ||
       parsed.hasLicenciaConstruccion ||
       parsed.hasCorresponsables ||
-      lcFiles.hasFirmas ||
-      lcFiles.hasDocumentos ||
+      lcFiles.hasArchivosLc ||
       fotos0.hasFotos;
 
     if (!hayCambios) {
@@ -324,22 +319,24 @@ export class RegistrosActualizarService {
               idRegistro,
             );
           }
+        }
 
-          if (fotos0.hasFotos) {
-            fotos = await this.saveAndUpsertFotosFlujo0(
-              manager,
-              idRegistro,
-              fotos0.photoInputs,
-            );
-          }
+        // Con PredioObra = 1 la sanitización solo conserva los archivos
+        // transversales de Licencias (fachada/estacionamiento/bodega),
+        // que se guardan en Fotos sin crear ni actualizar Licencias.
+        if (fotos0.hasFotos) {
+          fotos = await this.saveAndUpsertFotosFlujo0(
+            manager,
+            idRegistro,
+            fotos0.photoInputs,
+          );
         }
 
         if (predioFinal === 1) {
           const needLc =
             parsed.hasLicenciaConstruccion ||
             parsed.hasCorresponsables ||
-            lcFiles.hasFirmas ||
-            lcFiles.hasDocumentos;
+            lcFiles.hasArchivosLc;
 
           if (needLc) {
             const lcResult =
@@ -349,24 +346,18 @@ export class RegistrosActualizarService {
                 parsed.licenciaConstruccion,
                 parsed.hasLicenciaConstruccion,
                 parsed.hasCorresponsables,
-                lcFiles.hasFirmas || lcFiles.hasDocumentos,
+                lcFiles.hasArchivosLc,
               );
             idLicenciaConstruccion = lcResult.idLicenciaConstruccion;
             corresponsables = lcResult.corresponsables;
           }
 
-          if (
-            (lcFiles.hasFirmas || lcFiles.hasDocumentos) &&
-            idLicenciaConstruccion != null
-          ) {
+          if (lcFiles.hasArchivosLc && idLicenciaConstruccion != null) {
             fotosLicenciaConstruccion = await this.saveLcFiles(
               manager,
               idRegistro,
               idLicenciaConstruccion,
-              lcFiles.firmas,
-              lcFiles.documentosLc,
-              lcFiles.hasFirmas,
-              lcFiles.hasDocumentos,
+              lcFiles.archivosLc,
             );
           }
         }
@@ -403,65 +394,87 @@ export class RegistrosActualizarService {
     return this.updateFromMultipart(body);
   }
 
+  /**
+   * Guarda archivos LC nuevos y crea/actualiza Filas en FotosLicenciaConstruccion.
+   * Si ya existe IdLicenciaConstruccion + IdTipoFoto → solo reemplaza Ruta
+   * (conserva Id y archivo físico anterior).
+   */
   private async saveLcFiles(
     manager: EntityManager,
     idRegistro: number,
     idLicenciaConstruccion: number,
-    firmas: FirmaFiles,
-    documentosLc: LcDocumentoFiles,
-    hasFirmas: boolean,
-    hasDocumentos: boolean,
+    archivosLc: LcFiles,
   ): Promise<FotoLcResultado[]> {
+    const { saved } = await this.storageService.saveLcFiles(
+      idRegistro,
+      archivosLc,
+    );
+
     const fotosResultado: FotoLcResultado[] = [];
-    const ahora = new Date();
-
-    if (hasFirmas) {
-      const { saved } = await this.storageService.saveFirmas(
-        idRegistro,
-        firmas,
-      );
-      for (const item of saved) {
-        const foto = await manager.save(
-          FotosLicenciaConstruccion,
-          manager.create(FotosLicenciaConstruccion, {
-            idLicenciaConstruccion,
-            ruta: item.publicUrl,
-            fechaHora: ahora,
-            idTipoFoto: item.idTipoFoto,
-          }),
-        );
-        fotosResultado.push({
-          id: Number(foto.id),
-          idTipoFoto: item.idTipoFoto,
-          ruta: item.publicUrl,
-        });
-      }
-    }
-
-    if (hasDocumentos) {
-      const { saved } = await this.storageService.saveDocumentoArrays(
-        idRegistro,
-        documentosLc,
-      );
-      for (const item of saved) {
-        const foto = await manager.save(
-          FotosLicenciaConstruccion,
-          manager.create(FotosLicenciaConstruccion, {
-            idLicenciaConstruccion,
-            ruta: item.publicUrl,
-            fechaHora: ahora,
-            idTipoFoto: item.idTipoFoto,
-          }),
-        );
-        fotosResultado.push({
-          id: Number(foto.id),
-          idTipoFoto: item.idTipoFoto,
-          ruta: item.publicUrl,
-        });
-      }
+    for (const item of saved) {
+      const foto = await this.createOrReplaceFotoLicenciaUrl(manager, {
+        idLicenciaConstruccion,
+        idTipoFoto: item.idTipoFoto,
+        nuevaUrl: item.publicUrl,
+      });
+      fotosResultado.push({
+        id: Number(foto.entity.id),
+        idTipoFoto: item.idTipoFoto,
+        ruta: item.publicUrl,
+        accion: foto.accion,
+      });
     }
 
     return fotosResultado;
+  }
+
+  /**
+   * Actualiza Ruta de la fila con Id mayor si hay duplicados históricos;
+   * no elimina filas ni archivos físicos.
+   */
+  private async createOrReplaceFotoLicenciaUrl(
+    manager: EntityManager,
+    params: {
+      idLicenciaConstruccion: number;
+      idTipoFoto: number;
+      nuevaUrl: string;
+    },
+  ): Promise<{
+    entity: FotosLicenciaConstruccion;
+    accion: 'creada' | 'actualizada';
+  }> {
+    const existentes = await manager.find(FotosLicenciaConstruccion, {
+      where: {
+        idLicenciaConstruccion: params.idLicenciaConstruccion,
+        idTipoFoto: params.idTipoFoto,
+      },
+      order: { id: 'DESC' },
+    });
+
+    if (existentes.length > 1) {
+      this.logger.warn(
+        `FotosLicenciaConstruccion duplicadas para IdLicenciaConstruccion=${params.idLicenciaConstruccion} IdTipoFoto=${params.idTipoFoto}: se actualizará Id=${existentes[0].id}`,
+      );
+    }
+
+    if (existentes.length > 0) {
+      const foto = existentes[0];
+      foto.ruta = params.nuevaUrl;
+      foto.fechaHora = new Date();
+      const saved = await manager.save(FotosLicenciaConstruccion, foto);
+      return { entity: saved, accion: 'actualizada' };
+    }
+
+    const created = await manager.save(
+      FotosLicenciaConstruccion,
+      manager.create(FotosLicenciaConstruccion, {
+        idLicenciaConstruccion: params.idLicenciaConstruccion,
+        idTipoFoto: params.idTipoFoto,
+        ruta: params.nuevaUrl,
+        fechaHora: new Date(),
+      }),
+    );
+    return { entity: created, accion: 'creada' };
   }
 
   private async saveAndUpsertFotosFlujo0(
@@ -626,38 +639,10 @@ export class RegistrosActualizarService {
     }
   }
 
-  private async assertTipoFotoCatalog(firmas: FirmaFiles): Promise<void> {
-    const requiredIds = (Object.keys(firmas) as FirmaKey[])
-      .filter((k) => firmas[k])
-      .map((k) => FIRMA_TIPO_FOTO[k]);
-
-    if (!requiredIds.length) return;
-
-    const unique = [...new Set(requiredIds)];
-    const found = await this.dataSource.getRepository(TipoFoto).find({
-      where: { id: In(unique) },
-      select: ['id'],
-    });
-    const foundIds = new Set(found.map((t) => Number(t.id)));
-
-    for (const id of unique) {
-      if (!foundIds.has(id)) {
-        const key = (Object.keys(FIRMA_TIPO_FOTO) as FirmaKey[]).find(
-          (k) => FIRMA_TIPO_FOTO[k] === id,
-        );
-        throw new BadRequestException(
-          `El TipoFoto ${id} requerido para ${key ?? 'la firma'} no existe.`,
-        );
-      }
-    }
-  }
-
-  private async assertDocumentoTipoFotoCatalog(
-    files: LcDocumentoFiles,
-  ): Promise<void> {
-    const requiredIds = (Object.keys(files) as LcDocumentoKey[])
-      .filter((key) => (files[key]?.length ?? 0) > 0)
-      .map((key) => LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO[key]);
+  private async assertLcFileTipoFotoCatalog(files: LcFiles): Promise<void> {
+    const requiredIds = LC_FILE_KEYS.filter((key) => files[key]).map(
+      (key) => LC_FILE_TIPO_FOTO[key],
+    );
 
     if (!requiredIds.length) return;
 
@@ -670,13 +655,13 @@ export class RegistrosActualizarService {
 
     for (const id of unique) {
       if (foundIds.has(id)) continue;
-      const key = (
-        Object.keys(
-          LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
-        ) as LcDocumentoKey[]
-      ).find((item) => LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO[item] === id);
+      const key = LC_FILE_KEYS.find(
+        (item) => LC_FILE_TIPO_FOTO[item] === id,
+      ) as LcFileKey | undefined;
       throw new BadRequestException(
-        `El TipoFoto ${id} requerido para ${key ?? 'el documento de LicenciaConstruccion'} no existe.`,
+        `El TipoFoto ${id} requerido para ${
+          key ? LC_FILE_FIELD_NAMES[key] : 'el archivo de LicenciaConstruccion'
+        } no existe.`,
       );
     }
   }
