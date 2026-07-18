@@ -116,3 +116,69 @@ describe('CreateLicenciaConstruccionDto.TipoSolicitudLicencia', () => {
     },
   );
 });
+
+describe('CreateLicenciaConstruccionDto nuevos campos escalares', () => {
+  async function validateLc(
+    payload: Record<string, unknown>,
+    property: string,
+  ) {
+    const dto = plainToInstance(CreateLicenciaConstruccionDto, payload);
+    const errors = await validate(dto);
+    const fieldErrors = errors.filter((error) => error.property === property);
+    return { dto, fieldErrors };
+  }
+
+  it('acepta todos los nuevos campos con 0 y 1 preservados', async () => {
+    const { dto, fieldErrors } = await validateLc(
+      {
+        NumeroExpediente: 'EXP-2026-001',
+        NumeroControl: 'CTRL-001',
+        SeguimientoObra: 'En revisión',
+        ConstanciaAlineamiento: '1',
+        LicenciaUsoSuelo: '0',
+        PlanoAutorizado: '1',
+        LicenciaFraccionamiento: '0',
+        Escrituras: '1',
+        FactibilidadAguaPotable: '1',
+        RecibosPagoPredial: '0',
+        RecibosMunicipales: '1',
+        PlanoArquitectonicos: '1',
+        Otros: '0',
+      },
+      'ConstanciaAlineamiento',
+    );
+
+    expect(fieldErrors).toHaveLength(0);
+    expect(dto.NumeroExpediente).toBe('EXP-2026-001');
+    expect(dto.NumeroControl).toBe('CTRL-001');
+    expect(dto.SeguimientoObra).toBe('En revisión');
+    expect(dto.ConstanciaAlineamiento).toBe(1);
+    expect(dto.LicenciaUsoSuelo).toBe(0);
+    expect(dto.Otros).toBe(0);
+    expect(dto.LicenciaUsoSuelo).not.toBe(true);
+    expect(dto.LicenciaUsoSuelo).not.toBe(false);
+  });
+
+  it.each([
+    ['ConstanciaAlineamiento', '2'],
+    ['ConstanciaAlineamiento', 'true'],
+    ['ConstanciaAlineamiento', 'abc'],
+    ['NumeroExpediente', 'x'.repeat(51)],
+    ['SeguimientoObra', 'x'.repeat(51)],
+  ])('rechaza %s inválido %p', async (property, value) => {
+    const { fieldErrors } = await validateLc({ [property]: value }, property);
+    expect(fieldErrors.length).toBeGreaterThan(0);
+  });
+
+  it.each(['0', '1', 0, 1])(
+    'acepta indicador ConstanciaAlineamiento=%p',
+    async (input) => {
+      const { dto, fieldErrors } = await validateLc(
+        { ConstanciaAlineamiento: input },
+        'ConstanciaAlineamiento',
+      );
+      expect(fieldErrors).toHaveLength(0);
+      expect(dto.ConstanciaAlineamiento).toBe(Number(input));
+    },
+  );
+});

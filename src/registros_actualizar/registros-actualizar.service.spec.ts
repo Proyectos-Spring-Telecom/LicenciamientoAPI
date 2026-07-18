@@ -132,6 +132,55 @@ describe('parseRegistroActualizarMultipart', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('parsea nuevos campos escalares de LicenciaConstruccion con 0 válido', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'LicenciaConstruccion.NumeroExpediente': 'EXP-2026-002',
+        'LicenciaConstruccion.NumeroControl': 'CTRL-002',
+        'LicenciaConstruccion.SeguimientoObra': 'En revisión',
+        'LicenciaConstruccion.ConstanciaAlineamiento': '0',
+        'LicenciaConstruccion.LicenciaUsoSuelo': '1',
+        'LicenciaConstruccion.Otros': '0',
+      },
+      1,
+    );
+
+    expect(parsed.hasLicenciaConstruccion).toBe(true);
+    expect(parsed.licenciaConstruccion?.NumeroExpediente).toBe('EXP-2026-002');
+    expect(parsed.licenciaConstruccion?.NumeroControl).toBe('CTRL-002');
+    expect(parsed.licenciaConstruccion?.SeguimientoObra).toBe('En revisión');
+    expect(parsed.licenciaConstruccion?.ConstanciaAlineamiento).toBe(0);
+    expect(parsed.licenciaConstruccion?.LicenciaUsoSuelo).toBe(1);
+    expect(parsed.licenciaConstruccion?.Otros).toBe(0);
+  });
+
+  it('rechaza indicador LicenciaConstruccion fuera de 0|1', async () => {
+    await expect(
+      parseRegistroActualizarMultipart(
+        {
+          idRegistro: '10',
+          'LicenciaConstruccion.ConstanciaAlineamiento': '2',
+        },
+        1,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('ignora vacíos en LC sin marcar hasLicenciaConstruccion', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'LicenciaConstruccion.NumeroControl': '',
+        'LicenciaConstruccion.SeguimientoObra': '   ',
+        'LicenciaConstruccion.PlanoAutorizado': null,
+      },
+      1,
+    );
+
+    expect(parsed.hasLicenciaConstruccion).toBe(false);
+  });
+
   it('acepta Licencias.FechaHora (no está prohibido como en Sapac)', async () => {
     const parsed = await parseRegistroActualizarMultipart(
       {
@@ -533,6 +582,68 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     expect(lc.descripcionProyecto).toBe('Actualizado');
     expect(lc.nombrePropietario).toBe('Juan');
     expect(lc.superficieTerrenoM2).toBe(0);
+  });
+
+  it('actualiza nuevos campos LC conservando Id y sin duplicar fila', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const lc = {
+      id: 8,
+      idRegistro: 10,
+      numeroExpediente: 'EXP-OLD',
+      numeroControl: 'CTRL-OLD',
+      seguimientoObra: 'Anterior',
+      constanciaAlineamiento: 1,
+      licenciaUsoSuelo: 1,
+      otros: 0,
+    } as LicenciaConstruccion;
+    const { service, manager } = createService({ registro, licenciaConstruccion: lc });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.NumeroExpediente': 'EXP-2026-002',
+      'LicenciaConstruccion.ConstanciaAlineamiento': '0',
+      'LicenciaConstruccion.Otros': '1',
+    });
+
+    expect(lc.id).toBe(8);
+    expect(lc.numeroExpediente).toBe('EXP-2026-002');
+    expect(lc.numeroControl).toBe('CTRL-OLD');
+    expect(lc.seguimientoObra).toBe('Anterior');
+    expect(lc.constanciaAlineamiento).toBe(0);
+    expect(lc.otros).toBe(1);
+    expect(manager.create).not.toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.anything(),
+    );
+  });
+
+  it('no sobrescribe LC con NumeroControl o SeguimientoObra vacíos', async () => {
+    const registro = { id: 10, predioObra: 1, estatus: 4 } as Registros;
+    const lc = {
+      id: 8,
+      idRegistro: 10,
+      numeroExpediente: 'EXP-KEEP',
+      numeroControl: 'CTRL-KEEP',
+      seguimientoObra: 'Seguimiento activo',
+      planoAutorizado: 1,
+    } as LicenciaConstruccion;
+    const { service } = createService({ registro, licenciaConstruccion: lc });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.NumeroExpediente': 'EXP-KEEP',
+      'LicenciaConstruccion.NumeroControl': '',
+      'LicenciaConstruccion.SeguimientoObra': '   ',
+      'LicenciaConstruccion.PlanoAutorizado': null,
+    });
+
+    expect(lc.numeroControl).toBe('CTRL-KEEP');
+    expect(lc.seguimientoObra).toBe('Seguimiento activo');
+    expect(lc.planoAutorizado).toBe(1);
   });
 
   it('cambio PredioObra 0→1 crea LC y no toca Sapac', async () => {

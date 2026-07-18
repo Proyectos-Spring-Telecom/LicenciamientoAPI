@@ -55,6 +55,12 @@ const multiBinaryFiles = {
   maxItems: MAX_DOCUMENTOS_POR_TIPO,
 };
 
+const binaryTiny = {
+  type: 'integer' as const,
+  enum: [0, 1],
+  nullable: true,
+};
+
 @ApiTags('Registros Actualizar')
 @ApiBearerAuth('bearer-token')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -364,6 +370,31 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           format: 'date-time',
           nullable: true,
         },
+        'LicenciaConstruccion.NumeroExpediente': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+        },
+        'LicenciaConstruccion.NumeroControl': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+        },
+        'LicenciaConstruccion.SeguimientoObra': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+        },
+        'LicenciaConstruccion.ConstanciaAlineamiento': binaryTiny,
+        'LicenciaConstruccion.LicenciaUsoSuelo': binaryTiny,
+        'LicenciaConstruccion.PlanoAutorizado': binaryTiny,
+        'LicenciaConstruccion.LicenciaFraccionamiento': binaryTiny,
+        'LicenciaConstruccion.Escrituras': binaryTiny,
+        'LicenciaConstruccion.FactibilidadAguaPotable': binaryTiny,
+        'LicenciaConstruccion.RecibosPagoPredial': binaryTiny,
+        'LicenciaConstruccion.RecibosMunicipales': binaryTiny,
+        'LicenciaConstruccion.PlanoArquitectonicos': binaryTiny,
+        'LicenciaConstruccion.Otros': binaryTiny,
         'LicenciaConstruccion.Corresponsables[0].Id': {
           type: 'integer',
           nullable: true,

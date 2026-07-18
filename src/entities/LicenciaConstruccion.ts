@@ -82,8 +82,8 @@ export class LicenciaConstruccion {
   @Column('varchar', { name: 'NumeroControl', nullable: true, length: 50 })
   numeroControl: string | null;
 
-  @Column('tinyint', { name: 'SeguimientoObra', nullable: true })
-  seguimientoObra: number | null;
+  @Column('varchar', { name: 'SeguimientoObra', nullable: true, length: 50 })
+  seguimientoObra: string | null;
 
   @Column('tinyint', { name: 'ConstanciaAlineamiento', nullable: true })
   constanciaAlineamiento: number | null;

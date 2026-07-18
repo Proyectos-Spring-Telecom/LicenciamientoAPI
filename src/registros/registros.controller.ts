@@ -691,13 +691,19 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
         },
         'LicenciaConstruccion.NumeroExpediente': {
           type: 'string',
+          maxLength: 50,
           nullable: true,
         },
         'LicenciaConstruccion.NumeroControl': {
           type: 'string',
+          maxLength: 50,
           nullable: true,
         },
-        'LicenciaConstruccion.SeguimientoObra': binaryTiny,
+        'LicenciaConstruccion.SeguimientoObra': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+        },
         'LicenciaConstruccion.ConstanciaAlineamiento': binaryTiny,
         'LicenciaConstruccion.LicenciaUsoSuelo': binaryTiny,
         'LicenciaConstruccion.PlanoAutorizado': binaryTiny,
