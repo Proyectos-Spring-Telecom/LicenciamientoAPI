@@ -1,5 +1,55 @@
 /**
+ * Archivos de LicenciaConstruccion en POST /registros (fuente única de verdad).
+ * Cada campo multipart acepta máximo 1 archivo y genera una fila en
+ * FotosLicenciaConstruccion con el IdTipoFoto indicado.
+ */
+export const LC_FILE_TIPO_FOTO = {
+  constanciaAlineamiento: 10,
+  constanciaNumero: 29,
+  LicenciaUsoSuelo: 11,
+  PlanoAutorizado: 12,
+  LicenciaFraccionamiento: 13,
+  ConstanciaPropietario: 14,
+  Factibilidad: 15,
+  RecibosImpuestoPredial: 16,
+  JuegoDePlanosArquitectonicos1: 17,
+  JuegoDePlanosArquitectonicos2: 31,
+  JuegoDePlanosArquitectonicos3: 32,
+  otros: 18,
+  FirmaPropietario: 25,
+  FirmaDRO: 26,
+  FirmaCorresponsable: 27,
+  FirmaResponsableRecepcionDocumento: 28,
+} as const;
+
+export type LcFileKey = keyof typeof LC_FILE_TIPO_FOTO;
+
+export const LC_FILE_KEYS = Object.keys(LC_FILE_TIPO_FOTO) as LcFileKey[];
+
+/** Nombre multipart completo → IdTipoFoto (POST /registros). */
+export const LICENCIA_CONSTRUCCION_FILE_TYPE_MAP: Record<string, number> =
+  Object.fromEntries(
+    LC_FILE_KEYS.map((key) => [
+      `LicenciaConstruccion.${key}`,
+      LC_FILE_TIPO_FOTO[key],
+    ]),
+  );
+
+/** Clave interna → nombre multipart completo (POST /registros). */
+export const LC_FILE_FIELD_NAMES: Record<LcFileKey, string> =
+  Object.fromEntries(
+    LC_FILE_KEYS.map((key) => [key, `LicenciaConstruccion.${key}`]),
+  ) as Record<LcFileKey, string>;
+
+/** Nombre multipart completo → clave interna (POST /registros). */
+export const LC_FILE_FORM_TO_KEY: Record<string, LcFileKey> =
+  Object.fromEntries(
+    LC_FILE_KEYS.map((key) => [`LicenciaConstruccion.${key}`, key]),
+  );
+
+/**
  * Firmas de LicenciaConstruccion → IdTipoFoto fijo (no lo envía el cliente).
+ * Uso exclusivo de PATCH /registros_actualizar (el POST usa LC_FILE_TIPO_FOTO).
  */
 export const FIRMA_TIPO_FOTO = {
   FirmaPropietario: 25,
@@ -26,12 +76,16 @@ export const FIRMA_FORM_TO_KEY: Record<string, FirmaKey> = {
     'FirmaResponsableRecepcionDocumento',
 };
 
-/** Máximo de documentos por cada atributo múltiple de LicenciaConstruccion. */
+/**
+ * Máximo de documentos por cada atributo múltiple de LicenciaConstruccion.
+ * Uso exclusivo de PATCH /registros_actualizar (el POST ahora usa maxCount 1).
+ */
 export const MAX_DOCUMENTOS_POR_TIPO = 10;
 
 /**
  * Documentos múltiples de LicenciaConstruccion → IdTipoFoto fijo.
  * Nombres exactos del formulario (case-sensitive).
+ * Uso exclusivo de PATCH /registros_actualizar (contrato anterior).
  */
 export const LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO = {
   constanciaAlineamientoyNumero: 10,

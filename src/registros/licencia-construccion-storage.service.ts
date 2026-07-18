@@ -14,6 +14,10 @@ import {
   FIRMA_TIPO_FOTO,
   FirmaKey,
   LC_DOCUMENTO_FIELDS,
+  LC_FILE_FIELD_NAMES,
+  LC_FILE_KEYS,
+  LC_FILE_TIPO_FOTO,
+  LcFileKey,
   LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO,
   LcDocumentoKey,
   MAX_DOCUMENTOS_POR_TIPO,
@@ -29,6 +33,17 @@ export type FirmaFiles = Partial<Record<FirmaKey, Express.Multer.File>>;
 export type LcDocumentoFiles = Partial<
   Record<LcDocumentoKey, Express.Multer.File[]>
 >;
+
+/** Archivos de LicenciaConstruccion en POST: 1 archivo por campo/tipo. */
+export type LcFiles = Partial<Record<LcFileKey, Express.Multer.File>>;
+
+export interface SavedLcFile {
+  key: LcFileKey;
+  idTipoFoto: number;
+  fileName: string;
+  absolutePath: string;
+  publicUrl: string;
+}
 
 export interface SavedFirmaFile {
   key: FirmaKey;
@@ -126,6 +141,52 @@ export class LicenciaConstruccionStorageService implements OnModuleInit {
       list.forEach((file, index) => {
         this.assertValidFirmaFile(file, `${field.fieldName}[${index}]`);
       });
+    }
+  }
+
+  /** Valida los archivos individuales de LicenciaConstruccion (POST). */
+  assertValidLcFiles(files: LcFiles): void {
+    for (const key of LC_FILE_KEYS) {
+      const file = files[key];
+      if (file) this.assertValidFirmaFile(file, LC_FILE_FIELD_NAMES[key]);
+    }
+  }
+
+  /**
+   * Guarda los archivos individuales de LicenciaConstruccion (POST) bajo
+   * {base}/{IdRegistro}/{IdTipoFoto}/{uuid}.ext. Un archivo por campo/tipo.
+   */
+  async saveLcFiles(
+    idRegistro: number,
+    files: LcFiles,
+  ): Promise<{ saved: SavedLcFile[]; absoluteCreated: string[] }> {
+    const saved: SavedLcFile[] = [];
+    const absoluteCreated: string[] = [];
+
+    try {
+      for (const key of LC_FILE_KEYS) {
+        const file = files[key];
+        if (!file) continue;
+
+        this.assertValidFirmaFile(file, LC_FILE_FIELD_NAMES[key]);
+
+        const idTipoFoto = LC_FILE_TIPO_FOTO[key];
+        const stored = await this.writeFile(idRegistro, idTipoFoto, file);
+        absoluteCreated.push(stored.absolutePath);
+
+        saved.push({
+          key,
+          idTipoFoto,
+          fileName: stored.fileName,
+          absolutePath: stored.absolutePath,
+          publicUrl: stored.publicUrl,
+        });
+      }
+
+      return { saved, absoluteCreated };
+    } catch (error) {
+      await this.cleanup(absoluteCreated);
+      throw error;
     }
   }
 
