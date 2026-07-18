@@ -42,6 +42,7 @@ import {
   LICENCIAS_FILE_FIELD_NAMES,
   LICENCIAS_FILE_FORM_TO_KEY,
   LICENCIAS_SCALAR_ATTRS,
+  LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES,
   LicenciasFotoKey,
 } from './licencias.constants';
 import {
@@ -239,10 +240,14 @@ export async function parseRegistroMultipart(
       'No se pueden registrar fotografías de Catastro cuando PredioObra es 1.',
     );
   }
+  // fachada/estacionamiento/bodega son transversales: válidos en ambos flujos.
   if (
     predioObra === 1 &&
     Object.entries(sanitizedFiles).some(
-      ([key, files]) => licenciasFileFieldNames.has(key) && files.length > 0,
+      ([key, files]) =>
+        licenciasFileFieldNames.has(key) &&
+        !LICENCIAS_TRANSVERSAL_FILE_FIELD_NAMES.has(key) &&
+        files.length > 0,
     )
   ) {
     throw new BadRequestException(

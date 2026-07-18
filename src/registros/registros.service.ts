@@ -71,6 +71,7 @@ import {
 } from './licencia-construccion-storage.service';
 import {
   LICENCIAS_TIPO_FOTO,
+  LICENCIAS_TRANSVERSAL_FOTO_KEYS,
   LicenciasFotoKey,
 } from './licencias.constants';
 import {
@@ -1059,7 +1060,14 @@ export class RegistrosService {
         'No se pueden registrar fotografías de Catastro cuando PredioObra es 1.',
       );
     }
-    if (!crearLicencia && hasFotosLicencias) {
+    // fachada/estacionamiento/bodega son transversales (Fotos 6/7/8 en ambos
+    // flujos); solo licenciaFuncionamiento sigue restringido a PredioObra = 0.
+    const hasFotosLicenciasNoTransversales = (
+      Object.keys(fotosLicencias) as LicenciasFotoKey[]
+    ).some(
+      (key) => fotosLicencias[key] && !LICENCIAS_TRANSVERSAL_FOTO_KEYS.has(key),
+    );
+    if (!crearLicencia && hasFotosLicenciasNoTransversales) {
       throw new BadRequestException(
         'No se pueden registrar fotografías de Licencias cuando PredioObra es 1.',
       );
@@ -1291,7 +1299,15 @@ export class RegistrosService {
         }
 
         // Fotos SAPAC + Catastro + Licencias → misma tabla Fotos / mismo storage.
-        if (crearSapac || crearCatastro || crearLicencia || crearProteccionCivil) {
+        // Las fotos de Licencias son transversales: con PredioObra = 1 solo
+        // llegan fachada/estacionamiento/bodega (la sanitización descarta el resto).
+        if (
+          crearSapac ||
+          crearCatastro ||
+          crearLicencia ||
+          crearProteccionCivil ||
+          hasFotosLicencias
+        ) {
           const photoInputs: RegistroPhotoInput[] = [
             ...this.buildSapacPhotoInputs(fotosSapac),
             ...this.buildCatastroPhotoInputs(fotosCatastro),

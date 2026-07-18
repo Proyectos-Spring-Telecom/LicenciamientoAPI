@@ -622,19 +622,19 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           type: 'string',
           format: 'binary',
           description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=0. IdTipoFoto=6 → Fotos',
+            'Opcional. JPG/JPEG/PNG/PDF. Se procesa independientemente del valor de PredioObra. IdTipoFoto=6 → Fotos',
         },
         [LICENCIAS_FILE_FIELD_NAMES.estacionamiento]: {
           type: 'string',
           format: 'binary',
           description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=0. IdTipoFoto=7 → Fotos',
+            'Opcional. JPG/JPEG/PNG/PDF. Se procesa independientemente del valor de PredioObra. IdTipoFoto=7 → Fotos',
         },
         [LICENCIAS_FILE_FIELD_NAMES.bodega]: {
           type: 'string',
           format: 'binary',
           description:
-            'Opcional. JPG/JPEG/PNG/PDF. Solo PredioObra=0. IdTipoFoto=8 → Fotos',
+            'Opcional. JPG/JPEG/PNG/PDF. Se procesa independientemente del valor de PredioObra. IdTipoFoto=8 → Fotos',
         },
         [PROTECCION_CIVIL_FILE_FIELD_NAMES.vistoBueno]: {
           type: 'string',
