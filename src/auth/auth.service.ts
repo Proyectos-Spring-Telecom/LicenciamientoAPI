@@ -57,6 +57,10 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    const ahora = new Date();
+    await this.usuariosRepository.update(user.id, { ultimoLogin: ahora });
+    user.ultimoLogin = ahora;
+
     const token = this.authTokensService.signAccessToken(user);
     const refresh = this.authTokensService.signRefreshToken(user.id);
 
@@ -68,6 +72,7 @@ export class AuthService {
       revokedAt: null,
       replacedById: null,
     });
+
 
     return {
       token,
@@ -209,10 +214,13 @@ export class AuthService {
       apellidoPaterno: user.apellidoPaterno,
       apellidoMaterno: user.apellidoMaterno,
       nombreCompleto,
+      UserName: user.userName ?? null,
+      PhoneNumber: user.phoneNumber ?? null,
       permisos,
       logo: null,
       nombreRol: user.idRol2?.nombre ?? null,
       nombreGrupo: user.idGrupo2?.nombre ?? null,
+      ultimoLogin: user.ultimoLogin ?? null,
     };
   }
 

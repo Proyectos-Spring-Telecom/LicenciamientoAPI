@@ -75,6 +75,14 @@ export class RegistroDetalleLicenciaConstruccionDto {
 
   @ApiPropertyOptional({
     nullable: true,
+    maxLength: 100,
+    example: '1100-01-002-003',
+    description: 'Clave catastral asociada a la licencia de construcción.',
+  })
+  ClaveCatastral: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
     enum: [0, 1],
     description: 'Indicador tinyint (dato, no archivo).',
   })

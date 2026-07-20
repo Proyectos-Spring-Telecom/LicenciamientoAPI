@@ -736,6 +736,14 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           maxLength: 50,
           nullable: true,
         },
+        'LicenciaConstruccion.ClaveCatastral': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: '1100-01-002-003',
+          description:
+            'Solo PredioObra=1. Clave catastral de la licencia de construcción (texto; distinto de Catastro.Clave).',
+        },
         'LicenciaConstruccion.ConstanciaAlineamiento': binaryTiny,
         // LicenciaUsoSuelo / PlanoAutorizado / LicenciaFraccionamiento:
         // el mismo nombre existe como indicador tinyint (body) y como archivo

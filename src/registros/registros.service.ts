@@ -1361,6 +1361,7 @@ export class RegistrosService {
               numeroExpediente: lc.NumeroExpediente ?? null,
               numeroControl: lc.NumeroControl ?? null,
               seguimientoObra: lc.SeguimientoObra ?? null,
+              claveCatastral: lc.ClaveCatastral ?? null,
               constanciaAlineamiento: lc.ConstanciaAlineamiento ?? null,
               licenciaUsoSuelo: lc.LicenciaUsoSuelo ?? null,
               planoAutorizado: lc.PlanoAutorizado ?? null,

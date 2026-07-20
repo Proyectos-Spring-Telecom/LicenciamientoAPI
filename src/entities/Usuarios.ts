@@ -68,6 +68,9 @@ export class Usuarios {
   })
   fechaActualizacion: Date;
 
+  @Column('datetime', { name: 'UltimoLogin', nullable: true })
+  ultimoLogin: Date | null;
+
   @OneToMany(() => Bitacora, (bitacora) => bitacora.idUsuario2)
   bitacoras: Bitacora[];
 

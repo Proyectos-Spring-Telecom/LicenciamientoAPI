@@ -139,6 +139,7 @@ describe('parseRegistroActualizarMultipart', () => {
         'LicenciaConstruccion.NumeroExpediente': 'EXP-2026-002',
         'LicenciaConstruccion.NumeroControl': 'CTRL-002',
         'LicenciaConstruccion.SeguimientoObra': 'En revisión',
+        'LicenciaConstruccion.ClaveCatastral': '1100-01-002-003',
         'LicenciaConstruccion.ConstanciaAlineamiento': '0',
         'LicenciaConstruccion.LicenciaUsoSuelo': '1',
         'LicenciaConstruccion.Otros': '0',
@@ -150,6 +151,7 @@ describe('parseRegistroActualizarMultipart', () => {
     expect(parsed.licenciaConstruccion?.NumeroExpediente).toBe('EXP-2026-002');
     expect(parsed.licenciaConstruccion?.NumeroControl).toBe('CTRL-002');
     expect(parsed.licenciaConstruccion?.SeguimientoObra).toBe('En revisión');
+    expect(parsed.licenciaConstruccion?.ClaveCatastral).toBe('1100-01-002-003');
     expect(parsed.licenciaConstruccion?.ConstanciaAlineamiento).toBe(0);
     expect(parsed.licenciaConstruccion?.LicenciaUsoSuelo).toBe(1);
     expect(parsed.licenciaConstruccion?.Otros).toBe(0);
@@ -173,6 +175,7 @@ describe('parseRegistroActualizarMultipart', () => {
         idRegistro: '10',
         'LicenciaConstruccion.NumeroControl': '',
         'LicenciaConstruccion.SeguimientoObra': '   ',
+        'LicenciaConstruccion.ClaveCatastral': '   ',
         'LicenciaConstruccion.PlanoAutorizado': null,
       },
       1,
@@ -584,6 +587,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
       numeroExpediente: 'EXP-OLD',
       numeroControl: 'CTRL-OLD',
       seguimientoObra: 'Anterior',
+      claveCatastral: 'CAT-ANTERIOR',
       constanciaAlineamiento: 1,
       licenciaUsoSuelo: 1,
       otros: 0,
@@ -593,6 +597,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     await service.updateFromMultipart({
       idRegistro: '10',
       'LicenciaConstruccion.NumeroExpediente': 'EXP-2026-002',
+      'LicenciaConstruccion.ClaveCatastral': '1100-01-002-003',
       'LicenciaConstruccion.ConstanciaAlineamiento': '0',
       'LicenciaConstruccion.Otros': '1',
     });
@@ -601,6 +606,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     expect(lc.numeroExpediente).toBe('EXP-2026-002');
     expect(lc.numeroControl).toBe('CTRL-OLD');
     expect(lc.seguimientoObra).toBe('Anterior');
+    expect(lc.claveCatastral).toBe('1100-01-002-003');
     expect(lc.constanciaAlineamiento).toBe(0);
     expect(lc.otros).toBe(1);
     expect(manager.create).not.toHaveBeenCalledWith(
@@ -609,7 +615,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     );
   });
 
-  it('no sobrescribe LC con NumeroControl o SeguimientoObra vacíos', async () => {
+  it('no sobrescribe LC con NumeroControl, SeguimientoObra o ClaveCatastral vacíos', async () => {
     const registro = { id: 10, predioObra: 1, estatus: 4 } as Registros;
     const lc = {
       id: 8,
@@ -617,6 +623,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
       numeroExpediente: 'EXP-KEEP',
       numeroControl: 'CTRL-KEEP',
       seguimientoObra: 'Seguimiento activo',
+      claveCatastral: 'CAT-KEEP',
       planoAutorizado: 1,
     } as LicenciaConstruccion;
     const { service } = createService({ registro, licenciaConstruccion: lc });
@@ -626,12 +633,48 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
       'LicenciaConstruccion.NumeroExpediente': 'EXP-KEEP',
       'LicenciaConstruccion.NumeroControl': '',
       'LicenciaConstruccion.SeguimientoObra': '   ',
+      'LicenciaConstruccion.ClaveCatastral': '',
       'LicenciaConstruccion.PlanoAutorizado': null,
     });
 
     expect(lc.numeroControl).toBe('CTRL-KEEP');
     expect(lc.seguimientoObra).toBe('Seguimiento activo');
+    expect(lc.claveCatastral).toBe('CAT-KEEP');
     expect(lc.planoAutorizado).toBe(1);
+  });
+
+  it('acepta PATCH solo con ClaveCatastral cuando PredioObra efectivo es 1', async () => {
+    const registro = { id: 10, predioObra: 1, estatus: 4 } as Registros;
+    const lc = {
+      id: 8,
+      idRegistro: 10,
+      claveCatastral: null,
+    } as LicenciaConstruccion;
+    const { service } = createService({ registro, licenciaConstruccion: lc });
+
+    const result = await service.updateFromMultipart({
+      idRegistro: '10',
+      'LicenciaConstruccion.ClaveCatastral': '1100-01-002-003',
+    });
+
+    expect(result.status).toBe('success');
+    expect(lc.claveCatastral).toBe('1100-01-002-003');
+  });
+
+  it('ignora ClaveCatastral cuando PredioObra efectivo es 0', async () => {
+    const registro = { id: 10, predioObra: 0, estatus: 4 } as Registros;
+    const { service, manager } = createService({ registro });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Solo calle',
+      'LicenciaConstruccion.ClaveCatastral': 'NO-DEBE-GUARDARSE',
+    });
+
+    expect(manager.create).not.toHaveBeenCalledWith(
+      LicenciaConstruccion,
+      expect.anything(),
+    );
   });
 
   it('cambio PredioObra 0→1 crea LC y no toca Sapac', async () => {

@@ -134,6 +134,7 @@ describe('CreateLicenciaConstruccionDto nuevos campos escalares', () => {
         NumeroExpediente: 'EXP-2026-001',
         NumeroControl: 'CTRL-001',
         SeguimientoObra: 'En revisión',
+        ClaveCatastral: '0001-002-003',
         ConstanciaAlineamiento: '1',
         LicenciaUsoSuelo: '0',
         PlanoAutorizado: '1',
@@ -152,6 +153,7 @@ describe('CreateLicenciaConstruccionDto nuevos campos escalares', () => {
     expect(dto.NumeroExpediente).toBe('EXP-2026-001');
     expect(dto.NumeroControl).toBe('CTRL-001');
     expect(dto.SeguimientoObra).toBe('En revisión');
+    expect(dto.ClaveCatastral).toBe('0001-002-003');
     expect(dto.ConstanciaAlineamiento).toBe(1);
     expect(dto.LicenciaUsoSuelo).toBe(0);
     expect(dto.Otros).toBe(0);
@@ -165,6 +167,7 @@ describe('CreateLicenciaConstruccionDto nuevos campos escalares', () => {
     ['ConstanciaAlineamiento', 'abc'],
     ['NumeroExpediente', 'x'.repeat(51)],
     ['SeguimientoObra', 'x'.repeat(51)],
+    ['ClaveCatastral', 'x'.repeat(101)],
   ])('rechaza %s inválido %p', async (property, value) => {
     const { fieldErrors } = await validateLc({ [property]: value }, property);
     expect(fieldErrors.length).toBeGreaterThan(0);

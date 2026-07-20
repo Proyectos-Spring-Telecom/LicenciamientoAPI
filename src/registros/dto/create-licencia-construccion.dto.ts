@@ -186,6 +186,17 @@ export class CreateLicenciaConstruccionDto {
   @ApiPropertyOptional()
   SeguimientoObra?: string | null;
 
+  @Transform(emptyToNull)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @ApiPropertyOptional({
+    maxLength: 100,
+    example: '1100-01-002-003',
+    description: 'Clave catastral asociada a la licencia de construcción.',
+  })
+  ClaveCatastral?: string | null;
+
   @Transform(toOptionalBinaryFlag)
   @IsOptional()
   @IsInt()
