@@ -1516,6 +1516,7 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     expect(lc.SeguimientoObra).toBe('En revisión');
     expect(lc.TipoSolicitudLicencia).toBeNull();
     expect(lc.DescripcionProyecto).toBeNull();
+    expect(lc.ClaveCatastral).toBeNull();
     expect(lc.Corresponsables).toEqual([
       {
         Id: 1,
@@ -1577,6 +1578,7 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
         numeroExpediente: 'EXP-2026-001',
         numeroControl: 'CTRL-001',
         seguimientoObra: 'En revisión',
+        claveCatastral: '1100-01-002-003',
         constanciaAlineamiento: 1,
         licenciaUsoSuelo: 0,
         planoAutorizado: 1,
@@ -1598,6 +1600,7 @@ describe('Monitoreo — unicidad de atributos (sin duplicados ni aliases)', () =
     expect(lc.NumeroExpediente).toBe('EXP-2026-001');
     expect(lc.NumeroControl).toBe('CTRL-001');
     expect(lc.SeguimientoObra).toBe('En revisión');
+    expect(lc.ClaveCatastral).toBe('1100-01-002-003');
     expect(lc.ConstanciaAlineamiento).toBe(1);
     expect(lc.LicenciaUsoSuelo).toBe(0);
     expect(lc.PlanoAutorizado).toBe(1);

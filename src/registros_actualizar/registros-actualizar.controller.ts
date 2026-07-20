@@ -405,6 +405,14 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           maxLength: 50,
           nullable: true,
         },
+        'LicenciaConstruccion.ClaveCatastral': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: '1100-01-002-003',
+          description:
+            'Solo PredioObra efectivo=1. Actualización parcial (vacío no borra). Distinto de Catastro.Clave.',
+        },
         'LicenciaConstruccion.ConstanciaAlineamiento': binaryTiny,
         // LicenciaUsoSuelo / PlanoAutorizado / LicenciaFraccionamiento:
         // coinciden con archivos; Swagger los documenta como binario en

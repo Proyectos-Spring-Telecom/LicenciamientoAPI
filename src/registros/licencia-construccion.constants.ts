@@ -202,6 +202,7 @@ export const LC_SCALAR_ATTRS = new Set([
   'NumeroExpediente',
   'NumeroControl',
   'SeguimientoObra',
+  'ClaveCatastral',
   'ConstanciaAlineamiento',
   'LicenciaUsoSuelo',
   'PlanoAutorizado',

@@ -1046,6 +1046,7 @@ export class MonitoreoService {
       NumeroExpediente: lc.numeroExpediente ?? null,
       NumeroControl: lc.numeroControl ?? null,
       SeguimientoObra: lc.seguimientoObra ?? null,
+      ClaveCatastral: lc.claveCatastral ?? null,
       ConstanciaAlineamiento: lc.constanciaAlineamiento ?? null,
       LicenciaUsoSuelo: lc.licenciaUsoSuelo ?? null,
       PlanoAutorizado: lc.planoAutorizado ?? null,
