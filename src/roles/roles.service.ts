@@ -8,7 +8,7 @@ import {
 import { CreateRolDto } from './dto/create-rol.dto';
 import { UpdateRolDto } from './dto/update-role.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Not, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { Roles } from 'src/entities/Roles';
 import { RolesPermisos } from 'src/entities/RolesPermisos';
 import { Permisos } from 'src/entities/Permisos';
@@ -151,32 +151,12 @@ export class RolesService {
     }
   }
 
-  async findAll(
-    rol: number,
-    page: number,
-    limit: number,
-  ): Promise<ApiResponseCommon> {
-    let data: Roles[];
-    let total: number;
-
-    switch (rol) {
-      case 1:
-        [data, total] = await this.rolesRepository.findAndCount({
-          skip: (page - 1) * limit,
-          take: limit,
-          order: { id: 'DESC' },
-        });
-        break;
-
-      default:
-        [data, total] = await this.rolesRepository.findAndCount({
-          skip: (page - 1) * limit,
-          take: limit,
-          where: { id: Not(1) },
-          order: { id: 'DESC' },
-        });
-        break;
-    }
+  async findAll(page: number, limit: number): Promise<ApiResponseCommon> {
+    const [data, total] = await this.rolesRepository.findAndCount({
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { id: 'DESC' },
+    });
 
     return {
       data: data.map((item) => ({
@@ -191,27 +171,11 @@ export class RolesService {
     };
   }
 
-  async findAllList(rol: number): Promise<ApiResponseCommon> {
-    let roles: Roles[];
-
-    switch (rol) {
-      case 1:
-        roles = await this.rolesRepository.find({
-          where: { estatus: 1 },
-          order: { nombre: 'ASC' },
-        });
-        break;
-
-      default:
-        roles = await this.rolesRepository.find({
-          where: {
-            estatus: 1,
-            id: Not(1),
-          },
-          order: { nombre: 'ASC' },
-        });
-        break;
-    }
+  async findAllList(): Promise<ApiResponseCommon> {
+    const roles = await this.rolesRepository.find({
+      where: { estatus: 1 },
+      order: { nombre: 'ASC' },
+    });
 
     return {
       data: roles.map((item) => ({

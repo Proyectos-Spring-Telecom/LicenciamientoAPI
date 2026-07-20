@@ -69,7 +69,7 @@ INNER JOIN Roles r ON u.IdRol = r.Id`;
     private readonly emailService: MailService,
     private readonly jwtService: JwtService,
     private readonly authService: AuthService,
-  ) {}
+  ) { }
 
   private mapUsuario(item: Record<string, unknown>) {
     return {
@@ -202,7 +202,7 @@ ORDER BY u.Id DESC;`,
     try {
       let usuarioData;
 
-      if (rol === 1) {
+      if (rol === 4) {
         usuarioData = await this.usuarioRepository.query(
           `${this.usuarioSelectById}
 WHERE u.Id = ?
@@ -212,9 +212,9 @@ ORDER BY u.Id DESC`,
       } else {
         usuarioData = await this.usuarioRepository.query(
           `${this.usuarioSelectById}
-WHERE u.Id = ? AND u.IdGrupo = ? AND u.Estatus = 1
+WHERE u.Id = ? AND u.Estatus = 1
 ORDER BY u.Id DESC`,
-          [id, idGrupo],
+          [id],
         );
       }
 
