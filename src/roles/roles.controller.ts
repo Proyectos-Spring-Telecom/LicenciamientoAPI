@@ -54,19 +54,20 @@ export class RolesController {
   @Get('list')
   @ApiOperation({
     summary: 'Listar roles activos',
-    description: 'Obtiene el listado de roles activos según el rol del usuario autenticado.',
+    description:
+      'Obtiene todos los roles con estatus 1, sin filtrar por el rol del usuario autenticado.',
   })
   @ApiResponse({ status: 200, description: 'Lista de roles obtenida exitosamente' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  async findAllList(@Request() req): Promise<ApiResponseCommon> {
-    const rol = req.user.rol;
-    return await this.rolesService.findAllList(+rol);
+  async findAllList(): Promise<ApiResponseCommon> {
+    return await this.rolesService.findAllList();
   }
 
   @Get(':page/:limit')
   @ApiOperation({
     summary: 'Listar roles paginados',
-    description: 'Obtiene roles con paginación. Retorna data y paginated.',
+    description:
+      'Obtiene roles con paginación sin filtrar por el rol del usuario autenticado. Retorna data y paginated.',
   })
   @ApiParam({ name: 'page', type: 'number', description: 'Número de página', example: 1 })
   @ApiParam({
@@ -80,10 +81,8 @@ export class RolesController {
   async findAll(
     @Param('page', ParseIntPipe) page: number,
     @Param('limit', ParseIntPipe) limit: number,
-    @Request() req,
   ): Promise<ApiResponseCommon> {
-    const rol = req.user.rol;
-    return await this.rolesService.findAll(+rol, page, limit);
+    return await this.rolesService.findAll(page, limit);
   }
 
   @Get(':id')
