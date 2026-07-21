@@ -14,7 +14,7 @@ API de captura y seguimiento de licencias municipales (predio / obra). Un regist
 
 | PredioObra | Significado | Secciones principales |
 |------------|-------------|------------------------|
-| `0` | No construcción / predio | Sapac, Catastro, Licencias (+ Contacto), ProteccionCivil (+ ContactoRepresentante), fotos en `Fotos` |
+| `0` | No construcción / predio | Sapac, Catastro, Licencias (+ Contacto + ContactoRepresentante), ProteccionCivil, fotos en `Fotos` |
 | `1` | En construcción | LicenciaConstruccion (+ Corresponsables), fotos en `FotosLicenciaConstruccion` |
 
 Además existen **fotos transversales** de Licencias (`fachada`, `estacionamiento`, `bodega`) que se procesan en **ambos** valores de `PredioObra`.
@@ -44,7 +44,7 @@ Además existen **fotos transversales** de Licencias (`fachada`, `estacionamient
 
 - Multipart plano con notación de puntos (`Sapac.NumeroCuenta`, `LicenciaConstruccion.Corresponsables[0].NombreCompleto`, etc.).
 - `Estatus` fijo en `4`; `Registro` (folio) en `null`; capturista/grupo salen del JWT (`CapturistaVisita`).
-- Flujo `PredioObra = 0`: crea Sapac/Catastro/Licencias/ProteccionCivil (aunque vengan vacíos); Contacto / ContactoRepresentante solo con datos útiles.
+- Flujo `PredioObra = 0`: crea Sapac/Catastro/Licencias/ProteccionCivil (aunque vengan vacíos); Contacto / ContactoRepresentante (bajo Licencias) solo con datos útiles.
 - Flujo `PredioObra = 1`: crea `LicenciaConstruccion` (constraint único por `IdRegistro`) + corresponsables + archivos LC.
 - Archivos LC: **un campo multipart por `IdTipoFoto`**, `maxCount: 1`, fila en `FotosLicenciaConstruccion`.
 - Escalares de LC: `NumeroExpediente`, `NumeroControl`, `SeguimientoObra` (varchar ≤ 50), **`ClaveCatastral`** (varchar ≤ 100, texto; no confundir con `Catastro.Clave`), indicadores tinyint `0|1` (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, …, `Otros`).

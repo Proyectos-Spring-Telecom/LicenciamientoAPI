@@ -51,7 +51,7 @@ Respuesta exitosa: **HTTP 201**
 
 ### Textos (opcionales)
 
-Prefijos: `Sapac.*`, `Catastro.*`, `Licencias.*`, `ProteccionCivil.*`, `Licencias.Contacto.*`, `ProteccionCivil.ContactoRepresentante.*`
+Prefijos: `Sapac.*`, `Catastro.*`, `Licencias.*`, `ProteccionCivil.*`, `Licencias.Contacto.*`, `Licencias.ContactoRepresentante.*`
 
 Ejemplos:
 
@@ -65,7 +65,7 @@ Licencias.Estacionamiento     → 0 | 1
 Licencias.Contacto.Nombre
 ProteccionCivil.EsEmpresa     → 1 física, 2 moral
 ProteccionCivil.TienePrograma → 0 | 1
-ProteccionCivil.ContactoRepresentante.Telefono
+Licencias.ContactoRepresentante.Telefono
 ```
 
 El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil (aunque vengan vacíos).  
@@ -320,7 +320,7 @@ export function buildRegistroFormData(model: RegistroCreateFormModel): FormData 
       appendIfPresent(fd, `ProteccionCivil.${k}`, v);
     }
     for (const [k, v] of Object.entries(model.contactoRepresentante ?? {})) {
-      appendIfPresent(fd, `ProteccionCivil.ContactoRepresentante.${k}`, v);
+      appendIfPresent(fd, `Licencias.ContactoRepresentante.${k}`, v);
     }
     for (const [key, file] of Object.entries(model.archivosPredio0 ?? {})) {
       appendFile(fd, key, file as FileInput);

@@ -67,7 +67,7 @@ Licencias.Contacto.Nombre
 Licencias.Contacto.Correo         → email válido o vacío / placeholder
 ProteccionCivil.EsEmpresa         → 1 | 2
 ProteccionCivil.TienePrograma     → 0 | 1
-ProteccionCivil.ContactoRepresentante.Nombre
+Licencias.ContactoRepresentante.Nombre
 ```
 
 Si la sección no existe y envías un valor útil → el backend **la crea**.  
@@ -344,7 +344,7 @@ export function buildRegistroActualizarFormData(
     appendIfUseful(fd, `ProteccionCivil.${k}`, v);
   }
   for (const [k, v] of Object.entries(model.contactoRepresentante ?? {})) {
-    appendIfUseful(fd, `ProteccionCivil.ContactoRepresentante.${k}`, v);
+    appendIfUseful(fd, `Licencias.ContactoRepresentante.${k}`, v);
   }
   for (const [k, file] of Object.entries(model.archivosPredio0 ?? {})) {
     appendFile(fd, k, file as FileInput);

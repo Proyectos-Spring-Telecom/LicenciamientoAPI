@@ -327,7 +327,7 @@ Corresponsables (\`LicenciaConstruccion.Corresponsables[i].*\`) son 1:N opcional
 solo se crean elementos con información; \`IdLicenciaConstruccion\` lo asigna el backend.
 **PredioObra=0:** siempre crea Sapac, Catastro, Licencias y ProteccionCivil (aunque no vengan más campos).
 Contacto (Licencias.Contacto.*) solo se crea si tiene información.
-ContactoRepresentante (ProteccionCivil.ContactoRepresentante.*) solo se crea si tiene información.
+ContactoRepresentante (Licencias.ContactoRepresentante.*) solo se crea si tiene información.
 
 **Fotografías SAPAC** (JPG/JPEG/PNG/PDF, máx. 1 por campo; solo si PredioObra=0):
 \`Sapac.reciboSapac\` (IdTipoFoto=3), \`Sapac.caratulamedidor\` (4) y
@@ -337,11 +337,12 @@ ContactoRepresentante (ProteccionCivil.ContactoRepresentante.*) solo se crea si 
 Archivo opcional \`Catastro.reciboPredial\` (IdTipoFoto=2) → FotosRegistros / tabla Fotos.
 
 **Licencias** (solo PredioObra=0): se crea siempre. Contacto opcional vía
-\`Licencias.Contacto.*\`. Archivos opcionales:
+\`Licencias.Contacto.*\`. ContactoRepresentante opcional vía
+\`Licencias.ContactoRepresentante.*\` (tabla ContactoRepresentante por IdRegistro).
+Archivos opcionales:
 \`licenciaFuncionamiento\` (1), \`fachada\` (6), \`estacionamiento\` (7), \`bodega\` (8).
 
-**ProteccionCivil** (solo PredioObra=0): se crea siempre. ContactoRepresentante funcional 1:1
-vía \`ProteccionCivil.ContactoRepresentante.*\` solo si tiene información.
+**ProteccionCivil** (solo PredioObra=0): se crea siempre.
 Archivo opcional \`ProteccionCivil.vistoBueno\` (IdTipoFoto=9) → FotosRegistros / tabla Fotos.
 
 **Archivos de LicenciaConstruccion** (JPG/JPEG/PNG/PDF, máx. 1 archivo por campo; solo PredioObra=1):
@@ -569,6 +570,39 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           maxLength: 50,
           nullable: true,
         },
+        'Licencias.ContactoRepresentante.Nombre': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'Juan',
+          description:
+            'Contacto representante de Licencias (PredioObra=0). Tabla ContactoRepresentante.',
+        },
+        'Licencias.ContactoRepresentante.ApellidoPaterno': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'Pérez',
+        },
+        'Licencias.ContactoRepresentante.ApellidoMaterno': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'López',
+        },
+        'Licencias.ContactoRepresentante.Telefono': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+          example: '7771234567',
+        },
+        'Licencias.ContactoRepresentante.Correo': {
+          type: 'string',
+          format: 'email',
+          maxLength: 50,
+          nullable: true,
+          example: 'juan.perez@example.com',
+        },
         'ProteccionCivil.EsEmpresa': {
           type: 'integer',
           enum: [1, 2],
@@ -618,31 +652,6 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           description:
             'Indica si cuenta con programa de Protección Civil: 0 = No tiene, 1 = Sí tiene',
           example: 1,
-        },
-        'ProteccionCivil.ContactoRepresentante.Nombre': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.ApellidoPaterno': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.ApellidoMaterno': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.Telefono': {
-          type: 'string',
-          maxLength: 50,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.Correo': {
-          type: 'string',
-          maxLength: 50,
-          nullable: true,
         },
         [LICENCIAS_FILE_FIELD_NAMES.licenciaFuncionamiento]: {
           type: 'string',

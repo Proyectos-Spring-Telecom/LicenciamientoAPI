@@ -1188,6 +1188,69 @@ describe('MonitoreoService.findOne', () => {
     expect(result.data.ProteccionCivil).toBeNull();
   });
 
+  it('devuelve ContactoRepresentante dentro de Licencias, no en ProteccionCivil', async () => {
+    const { service } = createDetailService({
+      registro: baseRegistro,
+      licencias: {
+        id: 7,
+        idRegistro: 150,
+        nombreComercial: 'Negocio',
+        registro: null,
+        giro: null,
+        licenciaSuelo: null,
+        nombrePropietario: null,
+        apellidoPaternoPropietario: null,
+        apellidoMaternoPropietario: null,
+        tipoPersona: null,
+        rfc: null,
+        fechaExpedicion: null,
+        fechaRefrendo: null,
+        estacionamiento: null,
+        tipo: null,
+        fechaHora: null,
+      },
+      proteccionCivil: {
+        id: 3,
+        idRegistro: 150,
+        esEmpresa: 1,
+        razonSocial: null,
+        rfc: null,
+        nombre: 'PC Nombre',
+        apellidoPaterno: null,
+        apellidoMaterno: null,
+        telefono: null,
+        registroAcreditacion: null,
+        tienePrograma: 0,
+      },
+      contactoRepresentante: {
+        id: 9,
+        idRegistro: 150,
+        nombre: 'Juan',
+        apellidoPaterno: 'Pérez',
+        apellidoMaterno: 'López',
+        telefono: '7771234567',
+        correo: 'juan@example.com',
+      },
+    });
+
+    const result = await service.findOne(150, user({ rol: 4 }));
+    const licencias = result.data.Licencias as Record<string, unknown>;
+    const pc = result.data.ProteccionCivil as Record<string, unknown>;
+
+    expect(licencias.ContactoRepresentante).toEqual(
+      expect.objectContaining({
+        Id: 9,
+        Nombre: 'Juan',
+        ApellidoPaterno: 'Pérez',
+        ApellidoMaterno: 'López',
+        Telefono: '7771234567',
+        Correo: 'juan@example.com',
+      }),
+    );
+    expect(pc).not.toHaveProperty('ContactoRepresentante');
+    expect(pc.Nombre).toBe('PC Nombre');
+  });
+
   it('rol 4 consulta por Id sin filtro adicional', async () => {
     const { service, registrosRepository, capturistaVisitaRepository } =
       createDetailService({

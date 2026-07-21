@@ -31,6 +31,8 @@ import {
 import { LcFiles } from './licencia-construccion-storage.service';
 import {
   CONTACTO_FORM_PREFIX,
+  CONTACTO_REPRESENTANTE_FORM_PREFIX,
+  CONTACTO_REPRESENTANTE_SCALAR_ATTRS,
   CONTACTO_SCALAR_ATTRS,
   LICENCIAS_FILE_FIELD_NAMES,
   LICENCIAS_FILE_FORM_TO_KEY,
@@ -39,8 +41,6 @@ import {
   LicenciasFotoKey,
 } from './licencias.constants';
 import {
-  CONTACTO_REPRESENTANTE_FORM_PREFIX,
-  CONTACTO_REPRESENTANTE_SCALAR_ATTRS,
   PROTECCION_CIVIL_FILE_FIELD_NAMES,
   PROTECCION_CIVIL_FILE_FORM_TO_KEY,
   PROTECCION_CIVIL_SCALAR_ATTRS,
@@ -370,6 +370,22 @@ export async function parseRegistroMultipart(
       continue;
     }
 
+    if (key.startsWith(CONTACTO_REPRESENTANTE_FORM_PREFIX)) {
+      if (predioObra === 1) continue;
+
+      const attr = key.slice(CONTACTO_REPRESENTANTE_FORM_PREFIX.length);
+      if (FORBIDDEN_CONTACTO_REPRESENTANTE.has(attr)) {
+        throw new BadRequestException(
+          `El campo "${key}" no puede enviarse desde el cliente`,
+        );
+      }
+      if (!CONTACTO_REPRESENTANTE_SCALAR_ATTRS.has(attr)) {
+        throw new BadRequestException(`Campo no reconocido: "${key}"`);
+      }
+      contactoRepresentanteRaw[attr] = value;
+      continue;
+    }
+
     if (key.startsWith(CONTACTO_FORM_PREFIX)) {
       if (predioObra === 1) continue;
 
@@ -390,7 +406,12 @@ export async function parseRegistroMultipart(
       if (predioObra === 1) continue;
 
       const attr = key.slice('Licencias.'.length);
-      if (attr === 'Contacto' || attr.startsWith('Contacto.')) {
+      if (
+        attr === 'Contacto' ||
+        attr.startsWith('Contacto.') ||
+        attr === 'ContactoRepresentante' ||
+        attr.startsWith('ContactoRepresentante.')
+      ) {
         continue;
       }
       if (FORBIDDEN_LICENCIAS.has(attr)) {
@@ -405,32 +426,10 @@ export async function parseRegistroMultipart(
       continue;
     }
 
-    if (key.startsWith(CONTACTO_REPRESENTANTE_FORM_PREFIX)) {
-      if (predioObra === 1) continue;
-
-      const attr = key.slice(CONTACTO_REPRESENTANTE_FORM_PREFIX.length);
-      if (FORBIDDEN_CONTACTO_REPRESENTANTE.has(attr)) {
-        throw new BadRequestException(
-          `El campo "${key}" no puede enviarse desde el cliente`,
-        );
-      }
-      if (!CONTACTO_REPRESENTANTE_SCALAR_ATTRS.has(attr)) {
-        throw new BadRequestException(`Campo no reconocido: "${key}"`);
-      }
-      contactoRepresentanteRaw[attr] = value;
-      continue;
-    }
-
     if (key.startsWith('ProteccionCivil.')) {
       if (predioObra === 1) continue;
 
       const attr = key.slice('ProteccionCivil.'.length);
-      if (
-        attr === 'ContactoRepresentante' ||
-        attr.startsWith('ContactoRepresentante.')
-      ) {
-        continue;
-      }
       if (FORBIDDEN_PROTECCION_CIVIL.has(attr)) {
         throw new BadRequestException(
           `El campo "${key}" no puede enviarse desde el cliente`,

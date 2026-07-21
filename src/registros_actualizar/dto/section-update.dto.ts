@@ -63,20 +63,19 @@ export class UpdateContactoRepresentanteDto extends OmitType(
 
 export class UpdateLicenciasDto extends OmitType(
   PartialType(CreateLicenciaDto),
-  ['Contacto'] as const,
+  ['Contacto', 'ContactoRepresentante'] as const,
 ) {
   @IsOptional()
   @ValidateNested()
   @Type(() => UpdateContactoDto)
   Contacto?: UpdateContactoDto;
-}
 
-export class UpdateProteccionCivilDto extends OmitType(
-  PartialType(CreateProteccionCivilDto),
-  ['ContactoRepresentante'] as const,
-) {
   @IsOptional()
   @ValidateNested()
   @Type(() => UpdateContactoRepresentanteDto)
   ContactoRepresentante?: UpdateContactoRepresentanteDto;
 }
+
+export class UpdateProteccionCivilDto extends PartialType(
+  CreateProteccionCivilDto,
+) {}

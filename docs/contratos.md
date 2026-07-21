@@ -65,7 +65,7 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 2. Campos planos con notación de puntos / índices.
 3. Valores `0` son válidos; no convertir a `boolean` ni a `null`.
 4. Archivos: JPG / JPEG / PNG / PDF; **máximo 1 archivo por campo** de LC y de fotos flujo 0.
-5. Prefijos de sección: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `ProteccionCivil.`, `ProteccionCivil.ContactoRepresentante.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
+5. Prefijos de sección: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `Licencias.ContactoRepresentante.`, `ProteccionCivil.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
 
 ### PredioObra efectivo
 
@@ -92,9 +92,9 @@ No enviar: `Estatus`, `Registro` (folio), `IdCapturista`, `IdGrupo`.
 
 ### 3.2 PredioObra = 0 — textos
 
-Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `ProteccionCivil.*`, `ProteccionCivil.ContactoRepresentante.*`.
+Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `Licencias.ContactoRepresentante.*`, `ProteccionCivil.*`.
 
-El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. Contactos solo con datos útiles.
+El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. `Licencias.Contacto` y `Licencias.ContactoRepresentante` solo con datos útiles (tabla `ContactoRepresentante` por `IdRegistro`).
 
 `Catastro.Clave` es independiente de `LicenciaConstruccion.ClaveCatastral`.
 
@@ -313,6 +313,8 @@ Solo tipos **6, 7, 8** en este arreglo. Independiente de `PredioObra`. Vacío `[
 ### 5.2 Si `predioObra === 0`
 
 Objetos anidados: `Sapac`, `Catastro`, `Licencias`, `ProteccionCivil` (pueden ser `null`).  
+Dentro de `Licencias`: `Contacto` y `ContactoRepresentante` (mismo patrón de campos nulos cuando no hay fila).  
+`ProteccionCivil` **no** incluye `ContactoRepresentante`.  
 URLs embebidas: `reciboSapac`, `caratulamedidor`, `cuadromedidor`, `reciboPredial`, `licenciaFuncionamiento`, `fachada`, `estacionamiento`, `bodega`, `vistoBueno` → `string | null`.
 
 `Catastro.Clave` puede coexistir en la respuesta con `LicenciaConstruccion.ClaveCatastral` en otros registros; son campos distintos.

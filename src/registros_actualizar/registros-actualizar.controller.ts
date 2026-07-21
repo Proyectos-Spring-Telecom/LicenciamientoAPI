@@ -99,9 +99,10 @@ export class RegistrosActualizarController {
 Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
 (\`body.PredioObra ?? registro.PredioObra\`):
 
-- **PredioObra = 0:** Sapac, Catastro, Licencias (+ Contacto), ProteccionCivil (+ ContactoRepresentante) y archivos → Fotos (reemplazo no destructivo de Ruta).
+- **PredioObra = 0:** Sapac, Catastro, Licencias (+ Contacto + ContactoRepresentante), ProteccionCivil y archivos → Fotos (reemplazo no destructivo de Ruta).
 - **PredioObra = 1:** LicenciaConstruccion, Corresponsables y archivos individuales
   (1 por IdTipoFoto) → FotosLicenciaConstruccion (reemplazo no destructivo de Ruta).
+  Los datos de Licencias.ContactoRepresentante se ignoran (no se borran históricos).
 
 - \`idRegistro\` es obligatorio (body multipart).
 - Campos omitidos / vacíos / null no sobrescriben valores existentes.
@@ -259,6 +260,39 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           maxLength: 50,
           nullable: true,
         },
+        'Licencias.ContactoRepresentante.Nombre': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'Juan',
+          description:
+            'Opcional. Solo PredioObra efectivo = 0. Actualización parcial.',
+        },
+        'Licencias.ContactoRepresentante.ApellidoPaterno': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'Pérez',
+        },
+        'Licencias.ContactoRepresentante.ApellidoMaterno': {
+          type: 'string',
+          maxLength: 100,
+          nullable: true,
+          example: 'López',
+        },
+        'Licencias.ContactoRepresentante.Telefono': {
+          type: 'string',
+          maxLength: 50,
+          nullable: true,
+          example: '7771234567',
+        },
+        'Licencias.ContactoRepresentante.Correo': {
+          type: 'string',
+          format: 'email',
+          maxLength: 50,
+          nullable: true,
+          example: 'juan.perez@example.com',
+        },
         'ProteccionCivil.EsEmpresa': {
           type: 'integer',
           enum: [1, 2],
@@ -302,31 +336,6 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           enum: [0, 1],
           description: '0 = No tiene, 1 = Sí tiene',
           example: 0,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.Nombre': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.ApellidoPaterno': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.ApellidoMaterno': {
-          type: 'string',
-          maxLength: 100,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.Telefono': {
-          type: 'string',
-          maxLength: 50,
-          nullable: true,
-        },
-        'ProteccionCivil.ContactoRepresentante.Correo': {
-          type: 'string',
-          maxLength: 50,
           nullable: true,
         },
         'LicenciaConstruccion.TipoSolicitudLicencia': {
