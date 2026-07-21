@@ -1,13 +1,14 @@
 //Servicio usuario
 import {
   BadRequestException,
+  ForbiddenException,
   HttpException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Not, Repository } from 'typeorm';
 import { Usuarios } from 'src/entities/Usuarios';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -23,6 +24,17 @@ import { MailService } from 'src/mail/mail.service';
 import { JwtService } from '@nestjs/jwt';
 import { EnumModulos } from 'src/common/estatus.enum';
 import { AuthService } from 'src/auth/auth.service';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
+
+type UsuarioVisibilityAuth = {
+  idRol: 2 | 3 | 4;
+  idGrupo: number | null;
+};
+
+type VisibilityWhere = {
+  sql: string;
+  params: unknown[];
+};
 
 @Injectable()
 export class UsuariosService {
@@ -82,44 +94,108 @@ INNER JOIN Roles r ON u.IdRol = r.Id`;
     };
   }
 
+  /**
+   * Resuelve y valida el alcance de consulta a partir del JWT.
+   * Rol 1 / inválido → 403. Rol 2 sin grupo → 403.
+   */
+  private assertUsuarioVisibilityAuth(
+    user: AuthenticatedUser,
+  ): UsuarioVisibilityAuth {
+    if (user.rol === undefined || user.rol === null) {
+      throw new ForbiddenException(
+        'Rol sin permisos para consultar usuarios.',
+      );
+    }
+
+    const idRol = Number(user.rol);
+    if (!Number.isInteger(idRol)) {
+      throw new ForbiddenException('Rol de usuario inválido.');
+    }
+
+    if (idRol === 1) {
+      throw new ForbiddenException(
+        'No tiene permisos para consultar usuarios.',
+      );
+    }
+
+    if (idRol !== 2 && idRol !== 3 && idRol !== 4) {
+      throw new ForbiddenException(
+        'Rol sin permisos para consultar usuarios.',
+      );
+    }
+
+    let idGrupo: number | null = null;
+    if (
+      user.idGrupo !== undefined &&
+      user.idGrupo !== null &&
+      String(user.idGrupo).trim() !== ''
+    ) {
+      const parsedGrupo = Number(user.idGrupo);
+      if (!Number.isInteger(parsedGrupo)) {
+        idGrupo = null;
+      } else {
+        idGrupo = parsedGrupo;
+      }
+    }
+
+    if (idRol === 2 && idGrupo == null) {
+      throw new ForbiddenException(
+        'El usuario autenticado no tiene un grupo asignado.',
+      );
+    }
+
+    return { idRol, idGrupo };
+  }
+
+  /**
+   * Condiciones SQL de visibilidad (sin WHERE).
+   * Rol 4: sin restricción. Rol 3: excluye IdRol 4.
+   * Rol 2: mismo IdGrupo del token y excluye IdRol 4.
+   */
+  private buildVisibilityWhere(auth: UsuarioVisibilityAuth): VisibilityWhere {
+    switch (auth.idRol) {
+      case 4:
+        return { sql: '', params: [] };
+      case 3:
+        return { sql: 'u.IdRol <> ?', params: [4] };
+      case 2:
+        return {
+          sql: 'u.IdGrupo = ? AND u.IdRol <> ?',
+          params: [auth.idGrupo, 4],
+        };
+    }
+  }
+
+  private composeWhereClause(parts: string[]): string {
+    const filtered = parts.filter((part) => part.trim().length > 0);
+    return filtered.length > 0 ? `WHERE ${filtered.join(' AND ')}` : '';
+  }
+
   async getAllUsuario(
-    idUser: number,
-    idGrupo: number,
-    rol: number,
+    user: AuthenticatedUser,
     page: number,
     limit: number,
   ): Promise<ApiResponseCommon> {
     try {
+      const auth = this.assertUsuarioVisibilityAuth(user);
+      const visibility = this.buildVisibilityWhere(auth);
+      const whereClause = this.composeWhereClause([visibility.sql]);
       const offset = (page - 1) * limit;
-      let usuarios;
-      let totalResult;
 
-      if (rol === 4) {
-        usuarios = await this.usuarioRepository.query(
-          `${this.usuarioSelect}
+      const usuarios = await this.usuarioRepository.query(
+        `${this.usuarioSelect}
+${whereClause}
 ORDER BY u.Id DESC
 LIMIT ? OFFSET ?;`,
-          [limit, offset],
-        );
+        [...visibility.params, limit, offset],
+      );
 
-        totalResult = await this.usuarioRepository.query(
-          `SELECT COUNT(*) AS total FROM Usuarios u`,
-        );
-      } else {
-        usuarios = await this.usuarioRepository.query(
-          `${this.usuarioSelect}
-WHERE u.IdRol != 4
-ORDER BY u.Id DESC
-LIMIT ? OFFSET ?;`,
-          [limit, offset],
-        );
-
-        totalResult = await this.usuarioRepository.query(
-          `SELECT COUNT(*) AS total
+      const totalResult = await this.usuarioRepository.query(
+        `SELECT COUNT(*) AS total
 FROM Usuarios u
-WHERE u.IdRol != 4`,
-        );
-      }
+${whereClause}`,
+        visibility.params,
+      );
 
       const total = Number(totalResult[0]?.total || 0);
 
@@ -132,6 +208,9 @@ WHERE u.IdRol != 4`,
         },
       };
     } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al obtener la paginación de usuarios.',
         error: error instanceof Error ? error.message : String(error),
@@ -140,24 +219,19 @@ WHERE u.IdRol != 4`,
   }
 
   async getAllListUsuarios(
-    idGrupo: number,
-    rol: number,
+    user: AuthenticatedUser,
   ): Promise<ApiResponseCommon> {
     try {
-      let usuarios;
+      const auth = this.assertUsuarioVisibilityAuth(user);
+      const visibility = this.buildVisibilityWhere(auth);
+      const whereClause = this.composeWhereClause([visibility.sql]);
 
-      if (rol === 4) {
-        usuarios = await this.usuarioRepository.query(
-          `${this.usuarioSelect}
+      const usuarios = await this.usuarioRepository.query(
+        `${this.usuarioSelect}
+${whereClause}
 ORDER BY u.Id DESC;`,
-        );
-      } else {
-        usuarios = await this.usuarioRepository.query(
-          `${this.usuarioSelect}
-WHERE u.IdRol != 4
-ORDER BY u.Id DESC;`,
-        );
-      }
+        visibility.params,
+      );
 
       return {
         data: usuarios.map((item) => this.mapUsuario(item)),
@@ -173,11 +247,29 @@ ORDER BY u.Id DESC;`,
     }
   }
 
-  async getAllListUsuariosGrupo(idGrupo: number): Promise<ApiResponseCommon> {
+  async getAllListUsuariosGrupo(
+    idGrupo: number,
+    user: AuthenticatedUser,
+  ): Promise<ApiResponseCommon> {
     try {
-      const usuarios = await this.usuarioRepository.find({
-        where: { estatus: 1, idGrupo },
-      });
+      const auth = this.assertUsuarioVisibilityAuth(user);
+
+      if (auth.idRol === 2 && idGrupo !== auth.idGrupo) {
+        throw new ForbiddenException(
+          'No tiene permisos para consultar usuarios de otro grupo.',
+        );
+      }
+
+      const where: FindOptionsWhere<Usuarios> = {
+        estatus: 1,
+        idGrupo,
+      };
+
+      if (auth.idRol === 2 || auth.idRol === 3) {
+        where.idRol = Not(4);
+      }
+
+      const usuarios = await this.usuarioRepository.find({ where });
 
       if (usuarios.length === 0) {
         throw new NotFoundException('No se encontraron usuarios.');
@@ -200,25 +292,14 @@ ORDER BY u.Id DESC;`,
     }
   }
 
-  async getUsuarioByID(id: number, idGrupo: number, rol: number) {
+  async getUsuarioByID(id: number) {
     try {
-      let usuarioData;
-
-      if (rol === 4) {
-        usuarioData = await this.usuarioRepository.query(
-          `${this.usuarioSelectById}
+      const usuarioData = await this.usuarioRepository.query(
+        `${this.usuarioSelectById}
 WHERE u.Id = ?
 ORDER BY u.Id DESC`,
-          [id],
-        );
-      } else {
-        usuarioData = await this.usuarioRepository.query(
-          `${this.usuarioSelectById}
-WHERE u.Id = ? AND u.Estatus = 1
-ORDER BY u.Id DESC`,
-          [id],
-        );
-      }
+        [id],
+      );
 
       if (usuarioData.length === 0) {
         throw new NotFoundException('Usuario no encontrado.');

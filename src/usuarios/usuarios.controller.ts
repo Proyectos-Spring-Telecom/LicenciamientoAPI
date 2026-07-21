@@ -18,6 +18,8 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
 } from '@nestjs/swagger';
 import { UsuariosService } from './usuarios.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
@@ -27,6 +29,7 @@ import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { ApiResponseCommon, ApiCrudResponse } from 'src/common/ApiResponse';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth('bearer-token')
@@ -96,26 +99,30 @@ export class UsuariosController {
   @ApiOperation({
     summary: 'Obtener lista completa de usuarios',
     description:
-      'Lista todos los usuarios sin paginación. Si el rol autenticado es 4, ve todos; si es distinto de 4, ve todos excepto usuarios con IdRol = 4.',
+      'Lista todos los usuarios sin paginación. Visibilidad según JWT: rol 4 = todos; rol 3 = excepto rol 4; rol 2 = mismo grupo y excepto rol 4; rol 1 = denegado.',
   })
   @ApiResponse({
     status: 200,
     description: 'Lista completa de usuarios obtenida exitosamente',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado',
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
   })
-  async findAllList(@Request() req): Promise<ApiResponseCommon> {
-    const idGrupo = req.user.idGrupo;
-    const rol = req.user.rol;
-    return await this.usuariosService.getAllListUsuarios(+idGrupo, +rol);
+  @ApiForbiddenResponse({
+    description:
+      'El rol autenticado no tiene permisos para consultar usuarios.',
+  })
+  async findAllList(
+    @Request() req: { user: AuthenticatedUser },
+  ): Promise<ApiResponseCommon> {
+    return await this.usuariosService.getAllListUsuarios(req.user);
   }
 
   @Get('list/grupo/:id')
   @ApiOperation({
     summary: 'Obtener usuarios por grupo específico',
-    description: 'Obtiene la lista de usuarios asociados a un grupo específico'
+    description:
+      'Obtiene usuarios activos del grupo. Visibilidad según JWT: rol 4 = cualquier grupo; rol 3 = cualquier grupo excepto usuarios rol 4; rol 2 = solo su grupo del token (y excepto rol 4); rol 1 = denegado.',
   })
   @ApiParam({
     name: 'id',
@@ -131,21 +138,25 @@ export class UsuariosController {
     status: 404,
     description: 'Grupo no encontrado'
   })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado'
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'El rol autenticado no tiene permisos para consultar usuarios o intentó consultar otro grupo.',
   })
   async findAllListUsuarioGrupo(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user: AuthenticatedUser },
   ): Promise<ApiResponseCommon> {
-    return await this.usuariosService.getAllListUsuariosGrupo(id);
+    return await this.usuariosService.getAllListUsuariosGrupo(id, req.user);
   }
 
   @Get(':page/:limit')
   @ApiOperation({
     summary: 'Obtener usuarios con paginación',
     description:
-      'Lista paginada de usuarios. Si el rol autenticado es 4, ve todos; si es distinto de 4, ve todos excepto usuarios con IdRol = 4.',
+      'Lista paginada de usuarios. Visibilidad según JWT: rol 4 = todos; rol 3 = excepto rol 4; rol 2 = mismo grupo y excepto rol 4; rol 1 = denegado. El total refleja únicamente usuarios visibles.',
   })
   @ApiParam({
     name: 'page',
@@ -163,31 +174,26 @@ export class UsuariosController {
     status: 200,
     description: 'Usuarios obtenidos exitosamente con paginación',
   })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado',
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'El rol autenticado no tiene permisos para consultar usuarios.',
   })
   async findAll(
     @Param('page', ParseIntPipe) page: number,
     @Param('limit', ParseIntPipe) limit: number,
-    @Request() req,
+    @Request() req: { user: AuthenticatedUser },
   ): Promise<ApiResponseCommon> {
-    const idGrupo = req.user.idGrupo;
-    const rol = req.user.rol;
-    const idUser = req.user.userId;
-    return await this.usuariosService.getAllUsuario(
-      +idUser,
-      +idGrupo,
-      +rol,
-      page,
-      limit,
-    );
+    return await this.usuariosService.getAllUsuario(req.user, page, limit);
   }
 
   @Get(':id')
   @ApiOperation({
     summary: 'Obtener usuario por ID',
-    description: 'Obtiene la información del usuario. Los permisos se gestionan por rol (RolesPermisos), no por usuario.'
+    description:
+      'Obtiene la información del usuario por ID, sin filtro de visibilidad por rol o grupo.',
   })
   @ApiParam({
     name: 'id',
@@ -203,17 +209,11 @@ export class UsuariosController {
     status: 404,
     description: 'Usuario no encontrado'
   })
-  @ApiResponse({
-    status: 401,
-    description: 'No autorizado'
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
   })
-  async findOne(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req
-  ) {
-    const idGrupo = req.user.idGrupo;
-    const rol = req.user.rol;
-    return this.usuariosService.getUsuarioByID(+id, +idGrupo, +rol);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usuariosService.getUsuarioByID(+id);
   }
 
   // ==================== PATCH ====================
