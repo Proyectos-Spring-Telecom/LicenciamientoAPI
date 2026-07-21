@@ -1,10 +1,10 @@
 # Contratos HTTP — licenciasAPI (SIGMA)
 
-Contrato de API alineado al código vigente. Autenticación: `Authorization: Bearer {token}` en todos los endpoints listados (salvo que Swagger indique lo contrario).
+Contrato de API alineado al código vigente. Autenticación: `Authorization: Bearer {token}` (salvo que Swagger indique lo contrario).
 
 Índice de contexto: [contexto.md](./contexto.md).
 
-Última actualización: **2026-07-20**.
+Última actualización: **2026-07-21**.
 
 ---
 
@@ -17,68 +17,68 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 | `POST` | `/registros` | Crear registro (multipart) → **201** |
 | `PATCH` | `/registros_actualizar` | Actualizar parcialmente (multipart) → **200** |
 | `GET` | `/registros/:idRegistro` | Detalle completo → `{ data }` |
-| `GET` | `/monitoreo/:idRegistro` | Detalle completo (mismo contrato que registros) |
+| `GET` | `/monitoreo/:idRegistro` | Detalle completo (mismo contrato) |
 | `GET` | `/registros` | Listado paginado |
-| `GET` | `/monitoreo` | Listado plano (arreglo, sin wrapper) |
-| `POST` | `/registros/por-rango-fechas` | Listado por rango de fechas |
+| `GET` | `/monitoreo` | Listado plano (arreglo) |
+| `POST` | `/registros/por-rango-fechas` | Por rango de fechas |
 | `PATCH` | `/registros/:idRegistro/estatus` | Cambiar estatus |
 
 ### 1.2 Autenticación
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `POST` | `/login` | Inicio de sesión (actualiza `UltimoLogin`) |
+| `POST` | `/login` | Login (actualiza `UltimoLogin`) |
 | `POST` | `/login/refresh` | Renovar access token |
-| `POST` | `/login/logout` | Cerrar sesión (revocar refresh) |
-| `GET` | `/login/me` | Perfil del usuario autenticado |
-| `POST` | `/login/usuario/recuperar/acceso` | Recuperación de acceso |
-| `POST` | `/login/cambiar/accesso` | Cambio de acceso (flujo de recuperación) |
+| `POST` | `/login/logout` | Cerrar sesión |
+| `GET` | `/login/me` | Perfil autenticado |
+| `POST` | `/login/usuario/recuperar/acceso` | Recuperación |
+| `POST` | `/login/cambiar/accesso` | Cambio de acceso |
 
 ### 1.3 Usuarios
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `GET` | `/usuarios/list` | Lista completa (visibilidad por rol JWT) |
-| `GET` | `/usuarios/list/grupo/:id` | Usuarios activos por grupo (visibilidad JWT) |
-| `GET` | `/usuarios/:page/:limit` | Lista paginada (visibilidad JWT; `total` filtrado) |
-| `GET` | `/usuarios/:id` | Usuario por ID (**sin** filtro de visibilidad) |
-| `POST` | `/usuarios` | Crear usuario |
-| `PATCH` | `/usuarios/:id` | Actualizar datos |
+| `GET` | `/usuarios/list` | Lista (visibilidad JWT) |
+| `GET` | `/usuarios/list/grupo/:id` | Por grupo (visibilidad JWT) |
+| `GET` | `/usuarios/:page/:limit` | Paginado (total filtrado) |
+| `GET` | `/usuarios/:id` | Por ID (**sin** filtro de alcance) |
+| `POST` | `/usuarios` | Crear |
+| `PATCH` | `/usuarios/:id` | Actualizar |
 | `PATCH` | `/usuarios/estatus/:id` | Alternar estatus |
-| `PATCH` | `/usuarios/actualizar/contrasena/:id` | Cambiar contraseña |
+| `PATCH` | `/usuarios/actualizar/contrasena/:id` | Contraseña |
 
 ### 1.4 Roles
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| `GET` | `/roles/list` | Roles activos (módulo `@Roles(4)`; sin filtro adicional por rol del token) |
-| `GET` | `/roles/:page/:limit` | Roles paginados |
-| `GET` | `/roles/:id` | Rol por ID (+ permisos) |
-| `POST` | `/roles` | Crear rol |
+| `GET` | `/roles/list` | Activos (`@Roles(4)`) |
+| `GET` | `/roles/:page/:limit` | Paginado |
+| `GET` | `/roles/:id` | Por ID (+ permisos) |
+| `POST` | `/roles` | Crear |
 | `PATCH` | `/roles/estatus/:id` | Alternar estatus |
 
 ---
 
 ## 2. Multipart — reglas comunes
 
-1. Content-Type: `multipart/form-data` (no JSON).
+1. Content-Type: `multipart/form-data`.
 2. Campos planos con notación de puntos / índices.
-3. Valores `0` son válidos; no convertir a `boolean` ni a `null`.
-4. Archivos: JPG / JPEG / PNG / PDF; **máximo 1 archivo por campo** de LC y de fotos flujo 0.
-5. Prefijos de sección: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `Licencias.ContactoRepresentante.`, `ProteccionCivil.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
+3. Valores `0` válidos (no convertir a `boolean`/`null`).
+4. Archivos: JPG / JPEG / PNG / PDF; **máx. 1 por campo**.
+5. Prefijos: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `Licencias.ContactoRepresentante.`, `ProteccionCivil.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
 
 ### PredioObra efectivo
 
-| Endpoint | Cómo se determina |
-|----------|-------------------|
-| POST | Campo obligatorio `PredioObra` del body |
-| PATCH | Body si viene; si no, valor almacenado en `Registros` |
+| Endpoint | Determinación |
+|----------|---------------|
+| POST | `PredioObra` del body (obligatorio) |
+| PATCH | `body.PredioObra ?? registro.PredioObra` |
 
 ---
 
 ## 3. `POST /registros`
 
-### 3.1 Raíz (obligatorios parciales)
+### 3.1 Raíz
 
 | Campo | Obligatorio | Valores |
 |-------|-------------|---------|
@@ -86,21 +86,53 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 | `Longitud` | Sí | number |
 | `TipoRegistro` | Sí | `0` Local comercial, `1` Vivienda |
 | `PredioObra` | Sí | `0` / `1` |
-| Dirección (`EntidadFederativa` … `CP`) | No | string |
+| Dirección | No | string |
 
 No enviar: `Estatus`, `Registro` (folio), `IdCapturista`, `IdGrupo`.
 
 ### 3.2 PredioObra = 0 — textos
 
-Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*` (incluye `RazonSocial`, `Contacto.*`, `ContactoRepresentante.*`), `ProteccionCivil.*`.
+Secciones: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `Licencias.ContactoRepresentante.*`, `ProteccionCivil.*`.
 
-El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. `Licencias.Contacto` y `Licencias.ContactoRepresentante` solo con datos útiles (tabla `ContactoRepresentante` por `IdRegistro`).
+El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. Contacto / ContactoRepresentante solo con datos útiles.
 
-`Licencias.RazonSocial` (varchar 200) es independiente de `ProteccionCivil.RazonSocial` y de `Licencias.NombreComercial`. Solo aplica con PredioObra = 0.
+#### Licencias (escalares relevantes)
 
-`Catastro.Clave` es independiente de `LicenciaConstruccion.ClaveCatastral`.
+```text
+Licencias.Registro
+Licencias.NombreComercial
+Licencias.Giro
+Licencias.LicenciaSuelo
+Licencias.NombrePropietario
+Licencias.ApellidoPaternoPropietario
+Licencias.ApellidoMaternoPropietario
+Licencias.TipoPersona                  → 1|2
+Licencias.RFC
+Licencias.RazonSocial                  → string max 200 | null
+Licencias.FechaExpedicion
+Licencias.FechaRefrendo
+Licencias.Estacionamiento              → 0|1
+Licencias.Tipo
+Licencias.FechaHora
+```
 
-### 3.3 PredioObra = 0 — archivos → tabla `Fotos`
+**`Licencias.RazonSocial`:** opcional; trim; vacío → `NULL`. Independiente de `ProteccionCivil.RazonSocial` y de `NombreComercial`. No es transversal.
+
+#### ContactoRepresentante
+
+```text
+Licencias.ContactoRepresentante.Nombre
+Licencias.ContactoRepresentante.ApellidoPaterno
+Licencias.ContactoRepresentante.ApellidoMaterno
+Licencias.ContactoRepresentante.Telefono
+Licencias.ContactoRepresentante.Correo
+```
+
+Tabla física: `ContactoRepresentante` (`IdRegistro`). **No** usar `ProteccionCivil.ContactoRepresentante.*`.
+
+`Catastro.Clave` ≠ `LicenciaConstruccion.ClaveCatastral`.
+
+### 3.3 PredioObra = 0 — archivos → `Fotos`
 
 | Campo form | IdTipoFoto |
 |------------|------------|
@@ -131,59 +163,36 @@ LicenciaConstruccion.CedulaProfesional
 LicenciaConstruccion.Fecha
 LicenciaConstruccion.NumeroExpediente          → string max 50
 LicenciaConstruccion.NumeroControl             → string max 50
-LicenciaConstruccion.SeguimientoObra           → string max 50 (no es indicador)
-LicenciaConstruccion.ClaveCatastral            → string max 100 | null (texto; no numérico)
+LicenciaConstruccion.SeguimientoObra           → string max 50
+LicenciaConstruccion.ClaveCatastral            → string max 100 | null (texto)
 LicenciaConstruccion.ConstanciaAlineamiento    → 0|1
-LicenciaConstruccion.LicenciaUsoSuelo          → 0|1
-LicenciaConstruccion.PlanoAutorizado           → 0|1
-LicenciaConstruccion.LicenciaFraccionamiento   → 0|1
-LicenciaConstruccion.Escrituras                → 0|1
-LicenciaConstruccion.FactibilidadAguaPotable   → 0|1
-LicenciaConstruccion.RecibosPagoPredial        → 0|1
-LicenciaConstruccion.RecibosMunicipales        → 0|1
-LicenciaConstruccion.PlanoArquitectonicos      → 0|1
-LicenciaConstruccion.Otros                     → 0|1
+… indicadores … Otros                          → 0|1
 ```
 
-**`ClaveCatastral`:** opcional; trim; vacío/`null` → no se guarda (queda `NULL`). Conserva ceros iniciales, guiones y separadores. Solo aplica con `PredioObra = 1`.
-
-Corresponsables (sin `Id`):
-
-```text
-LicenciaConstruccion.Corresponsables[0].NombreCompleto
-LicenciaConstruccion.Corresponsables[0].NoRegLicenciaConstruccion
-LicenciaConstruccion.Corresponsables[0].CedulaProfesional
-```
+Corresponsables: `LicenciaConstruccion.Corresponsables[i].{NombreCompleto,NoRegLicenciaConstruccion,CedulaProfesional}`.
 
 ### 3.5 PredioObra = 1 — archivos → `FotosLicenciaConstruccion`
 
-Cada campo: **máximo 1 archivo**. Nombres antiguos multi-archivo **no** forman parte del contrato activo.
-
 | Campo form | IdTipoFoto |
 |------------|------------|
-| `LicenciaConstruccion.constanciaAlineamiento` | 10 |
-| `LicenciaConstruccion.constanciaNumero` | 29 |
-| `LicenciaConstruccion.LicenciaUsoSuelo` | 11 |
-| `LicenciaConstruccion.PlanoAutorizado` | 12 |
-| `LicenciaConstruccion.LicenciaFraccionamiento` | 13 |
-| `LicenciaConstruccion.ConstanciaPropietario` | 14 |
-| `LicenciaConstruccion.Factibilidad` | 15 |
-| `LicenciaConstruccion.RecibosImpuestoPredial` | 16 |
-| `LicenciaConstruccion.JuegoDePlanosArquitectonicos1` | 17 |
-| `LicenciaConstruccion.JuegoDePlanosArquitectonicos2` | 31 |
-| `LicenciaConstruccion.JuegoDePlanosArquitectonicos3` | 32 |
-| `LicenciaConstruccion.otros` | 18 |
-| `LicenciaConstruccion.FirmaPropietario` | 25 |
-| `LicenciaConstruccion.FirmaDRO` | 26 |
-| `LicenciaConstruccion.FirmaCorresponsable` | 27 |
-| `LicenciaConstruccion.FirmaResponsableRecepcionDocumento` | 28 |
+| `constanciaAlineamiento` | 10 |
+| `constanciaNumero` | 29 |
+| `LicenciaUsoSuelo` | 11 |
+| `PlanoAutorizado` | 12 |
+| `LicenciaFraccionamiento` | 13 |
+| `ConstanciaPropietario` | 14 |
+| `Factibilidad` | 15 |
+| `RecibosImpuestoPredial` | 16 |
+| `JuegoDePlanosArquitectonicos1\|2\|3` | 17, 31, 32 |
+| `otros` | 18 |
+| `FirmaPropietario` / `FirmaDRO` / `FirmaCorresponsable` / `FirmaResponsableRecepcionDocumento` | 25–28 |
 
-**Nota:** `LicenciaUsoSuelo` / `PlanoAutorizado` / `LicenciaFraccionamiento` pueden enviarse como escalar `0|1` **y** como archivo en el mismo request (colisión de nombre multipart).
+Colisión: `LicenciaUsoSuelo` / `PlanoAutorizado` / `LicenciaFraccionamiento` pueden ser escalar `0|1` **y** archivo.
 
 ### 3.6 Transversales en POST
 
-Con `PredioObra = 1` se aceptan `Licencias.fachada|estacionamiento|bodega` → `Fotos` 6/7/8.  
-No se procesan el resto de atributos de Licencias.
+Con `PredioObra = 1` se aceptan `Licencias.fachada|estacionamiento|bodega`.  
+No se procesan datos textuales de Licencias (incl. `RazonSocial`, Contacto, ContactoRepresentante).
 
 ### 3.7 Respuesta 201 (forma)
 
@@ -193,14 +202,13 @@ No se procesan el resto de atributos de Licencias.
   "message": "Registro creado correctamente",
   "data": {
     "id": 25,
-    "nombre": "",
     "idCapturistaVisita": 12,
     "idSapac": 8,
     "idCatastro": 5,
     "idLicencia": 9,
     "contacto": { "id": 3 },
     "idProteccionCivil": 4,
-    "contactoRepresentante": null,
+    "contactoRepresentante": { "id": 2 },
     "fotos": [{ "id": 100, "idTipoFoto": 6, "ruta": "https://..." }],
     "idLicenciaConstruccion": null,
     "corresponsables": [],
@@ -213,48 +221,32 @@ No se procesan el resto de atributos de Licencias.
 
 ## 4. `PATCH /registros_actualizar`
 
-### 4.1 Reglas de parcialidad
+### 4.1 Parcialidad
 
-- Obligatorio: `idRegistro` (≥ 1).
-- Omitir lo que no cambia.
-- `''` / `null` / espacios → **no** sobrescriben.
-- `0` sí actualiza.
+- Obligatorio: `idRegistro`.
+- Vacío / null / espacios → **no** sobrescriben; `0` sí.
 - **No** enviar `Estatus`.
-- Cambiar de flujo PredioObra **no borra** datos del otro flujo.
-- Solo `LicenciaConstruccion.ClaveCatastral` con valor útil y PredioObra efectivo = 1 cuenta como cambio válido.
+- Cambio de PredioObra **no borra** datos del otro flujo.
+- Campos útiles en solitario (p. ej. solo `Licencias.RazonSocial` o solo `ClaveCatastral`) cuentan como cambio.
 
 ### 4.2 PredioObra efectivo = 0
 
-Textos: mismos prefijos que el POST (solo campos a actualizar).  
-Archivos: misma tabla de tipos 1–9; reemplazo no destructivo de `Fotos.Ruta`.
-
-Si llega solo un archivo (p. ej. `Sapac.reciboSapac`) y no existe Sapac → se crea Sapac mínimo.
-
-`LicenciaConstruccion.ClaveCatastral` (y el resto de LC) se **ignora**; no se borra valor histórico.
+Textos: mismos prefijos que el POST (`Licencias.RazonSocial`, `Licencias.ContactoRepresentante.*`, etc.).  
+Archivos: tipos 1–9; reemplazo no destructivo.  
+LC se ignora (no se borra histórico).
 
 ### 4.3 PredioObra efectivo = 1
 
-Textos: `LicenciaConstruccion.*` (incluye `ClaveCatastral`) + corresponsables indexados.
+Textos: `LicenciaConstruccion.*` (incluye `ClaveCatastral`) + corresponsables.  
+Datos de Licencias (RazonSocial, Contacto, ContactoRepresentante) se **ignoran** (conservan históricos).  
+Archivos LC: mismos 16 campos; `accion: 'creada' | 'actualizada'`.
 
-| Corresponsable | Comportamiento |
-|----------------|----------------|
-| Con `Id` | Actualiza (debe pertenecer a la LC del registro) |
-| Sin `Id` + datos útiles | Crea |
-| Omitido | No se elimina |
-| Solo vacíos | Se ignora |
+### 4.4 Transversales
 
-Archivos LC: **mismos 16 campos individuales** que el POST (`maxCount: 1`).  
-Reemplazo: `IdLicenciaConstruccion + IdTipoFoto` → conservar `Id`, actualizar `Ruta`; no borrar archivo físico.  
-Respuesta de fotos LC incluye `accion: 'creada' | 'actualizada'`.
-
-### 4.4 Transversales en PATCH
-
-| PredioObra efectivo | Licencias / Contacto (datos) | fachada / estacionamiento / bodega |
-|---------------------|------------------------------|------------------------------------|
-| `0` | Procesar | Procesar si llegan |
-| `1` | Ignorar (no borrar) | Procesar si llegan → `Fotos` |
-
-Otros archivos de flujo 0 (`Sapac.*`, `Catastro.*`, `vistoBueno`, `licenciaFuncionamiento`) con PredioObra efectivo `1` se descartan.
+| PredioObra efectivo | Datos Licencias | fachada / estacionamiento / bodega |
+|---------------------|-----------------|------------------------------------|
+| `0` | Procesar | Sí si llegan |
+| `1` | Ignorar (no borrar) | Sí si llegan → `Fotos` |
 
 ### 4.5 Respuesta 200 (forma)
 
@@ -264,31 +256,14 @@ Otros archivos de flujo 0 (`Sapac.*`, `Catastro.*`, `vistoBueno`, `licenciaFunci
   "message": "Registro actualizado correctamente",
   "data": {
     "id": 10,
-    "nombre": "",
     "predioObra": 1,
-    "idSapac": null,
-    "idCatastro": null,
-    "idLicencia": null,
-    "contacto": null,
-    "idProteccionCivil": null,
-    "contactoRepresentante": null,
     "idLicenciaConstruccion": 20,
     "corresponsables": [{ "id": 5, "nombreCompleto": "Arq Uno" }],
     "fotosLicenciaConstruccion": [
-      {
-        "id": 100,
-        "idTipoFoto": 12,
-        "ruta": "https://.../10/12/uuid.pdf",
-        "accion": "actualizada"
-      }
+      { "id": 100, "idTipoFoto": 12, "ruta": "https://...", "accion": "actualizada" }
     ],
     "fotos": [
-      {
-        "id": 200,
-        "idTipoFoto": 6,
-        "ruta": "https://.../10/6/uuid.jpg",
-        "accion": "creada"
-      }
+      { "id": 200, "idTipoFoto": 6, "ruta": "https://...", "accion": "creada" }
     ]
   }
 }
@@ -298,163 +273,94 @@ Otros archivos de flujo 0 (`Sapac.*`, `Catastro.*`, `vistoBueno`, `licenciaFunci
 
 ## 5. Detalle — `GET /registros/:idRegistro` y `GET /monitoreo/:idRegistro`
 
-Ambos devuelven `{ data: … }` con el **mismo mapper** (`MonitoreoService.findOne`).
+Mismo mapper (`MonitoreoService.findOne`) → `{ data }`.
 
-### 5.1 Siempre presentes (camelCase)
-
-Campos de `Registros` + visita/capturista/supervisor/grupos +:
-
-```json
-"fotos": [
-  { "id": 61, "idRegistro": 50, "ruta": "https://...", "fechaHora": null, "idTipoFoto": 6 }
-]
-```
-
-Solo tipos **6, 7, 8** en este arreglo. Independiente de `PredioObra`. Vacío `[]` si no hay.
+### 5.1 Siempre: `fotos` tipos 6, 7, 8 (independiente de PredioObra)
 
 ### 5.2 Si `predioObra === 0`
 
-Objetos anidados: `Sapac`, `Catastro`, `Licencias`, `ProteccionCivil` (pueden ser `null`).  
-Dentro de `Licencias`: `Contacto`, `ContactoRepresentante` y escalares incluyendo `RazonSocial` (`string | null`, max 200).  
-`ProteccionCivil` **no** incluye `ContactoRepresentante`. Su `RazonSocial` es un campo distinto al de Licencias.  
-URLs embebidas: `reciboSapac`, `caratulamedidor`, `cuadromedidor`, `reciboPredial`, `licenciaFuncionamiento`, `fachada`, `estacionamiento`, `bodega`, `vistoBueno` → `string | null`.
+```json
+{
+  "Licencias": {
+    "Id": 5,
+    "NombreComercial": "Comercializadora Ejemplo",
+    "TipoPersona": 2,
+    "RFC": "ABC010101XYZ",
+    "RazonSocial": "Comercializadora Ejemplo, S.A. de C.V.",
+    "Contacto": { "Id": 1, "Nombre": "...", "Correo": "..." },
+    "ContactoRepresentante": {
+      "Id": 9,
+      "Nombre": "Juan",
+      "ApellidoPaterno": "Pérez",
+      "ApellidoMaterno": "López",
+      "Telefono": "7771234567",
+      "Correo": "juan@example.com"
+    },
+    "fachada": "https://...",
+    "estacionamiento": null,
+    "bodega": null
+  },
+  "ProteccionCivil": {
+    "RazonSocial": "Razón social registrada en Protección Civil",
+    "vistoBueno": null
+  }
+}
+```
 
-`Catastro.Clave` puede coexistir en la respuesta con `LicenciaConstruccion.ClaveCatastral` en otros registros; son campos distintos.
+- `Licencias` null si no hay fila (ni contacto/representante/fotos útiles).
+- `RazonSocial: null` si la columna es NULL (no omitir si el mapper expone todos los escalares).
+- `ProteccionCivil` **no** incluye `ContactoRepresentante`.
 
 ### 5.3 Si `predioObra === 1`
 
-```json
-"LicenciaConstruccion": null
-```
+Escalares LC incluyen `ClaveCatastral` + indicadores + Corresponsables + 16 URLs (`LC_RESPONSE_PHOTO_MAP`).  
+Tipo 30 sin atributo nominal. Duplicados → Id mayor.
 
-o un objeto con:
-
-**Escalares (datos de tabla):** `Id`, `TipoSolicitudLicencia`, …, `NumeroExpediente`, `NumeroControl`, `SeguimientoObra`, **`ClaveCatastral`** (`string | null`; no omitir si es `NULL` en BD), indicadores PascalCase (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, `PlanoAutorizado`, …, `Otros`), `Corresponsables[]`.
-
-**URLs de archivo (siempre presentes, `string | null`):**
-
-| Propiedad de respuesta | IdTipoFoto |
-|------------------------|------------|
-| `constanciaAlineamiento` | 10 |
-| `constanciaNumero` | 29 |
-| `licenciaUsoSuelo` | 11 |
-| `planoAutorizado` | 12 |
-| `licenciaFraccionamiento` | 13 |
-| `ConstanciaPropietario` | 14 |
-| `Factibilidad` | 15 |
-| `RecibosImpuestoPredial` | 16 |
-| `JuegoDePlanosArquitectonicos1` | 17 |
-| `JuegoDePlanosArquitectonicos2` | 31 |
-| `JuegoDePlanosArquitectonicos3` | 32 |
-| `otros` | 18 |
-| `FirmaPropietario` | 25 |
-| `FirmaDRO` | 26 |
-| `FirmaCorresponsable` | 27 |
-| `FirmaResponsableRecepcionDocumento` | 28 |
-
-Fuente: `LC_RESPONSE_PHOTO_MAP`. La ruta se toma de `FotosLicenciaConstruccion.Ruta` (URL completa almacenada; no se reconstruye).
-
-**No devolver:** `constanciaAlineamientoyNumero`, `LicenciaUsoyPlano`, `JuegoDePlanosArquitectonicos` (arrays).
-
-**Duplicados:** Id mayor por `IdTipoFoto`.
-
-**Tipo 30** (Recibo Servicios Municipales): existe en catálogo; **no** tiene atributo nominal en este contrato. No se inventa nombre.
-
-### 5.4 Ejemplo conceptual PredioObra = 1
+### 5.4 Ejemplo PredioObra = 1 (extracto)
 
 ```json
 {
   "data": {
     "id": 50,
-    "registro": "REG-000050",
     "predioObra": 1,
-    "fotos": [
-      { "id": 1, "idTipoFoto": 6, "ruta": "https://.../50/6/fachada.jpg" }
-    ],
+    "fotos": [{ "id": 1, "idTipoFoto": 6, "ruta": "https://..." }],
     "LicenciaConstruccion": {
       "Id": 20,
-      "TipoSolicitudLicencia": 1,
-      "DescripcionProyecto": "Construcción de vivienda",
       "ClaveCatastral": "1100-01-002-003",
       "LicenciaUsoSuelo": 1,
-      "PlanoAutorizado": 0,
-      "Corresponsables": [],
-      "constanciaAlineamiento": "https://.../50/10/a.pdf",
-      "constanciaNumero": null,
-      "licenciaUsoSuelo": "https://.../50/11/b.pdf",
-      "planoAutorizado": null,
-      "licenciaFraccionamiento": null,
-      "ConstanciaPropietario": null,
-      "Factibilidad": null,
-      "RecibosImpuestoPredial": null,
-      "JuegoDePlanosArquitectonicos1": "https://.../50/17/p1.pdf",
-      "JuegoDePlanosArquitectonicos2": "https://.../50/31/p2.pdf",
-      "JuegoDePlanosArquitectonicos3": null,
-      "otros": null,
-      "FirmaPropietario": "https://.../50/25/f.png",
-      "FirmaDRO": null,
-      "FirmaCorresponsable": null,
-      "FirmaResponsableRecepcionDocumento": null
+      "licenciaUsoSuelo": "https://.../11/b.pdf",
+      "Corresponsables": []
     }
   }
 }
 ```
 
-Obsérvese la coexistencia: `LicenciaUsoSuelo: 1` (tinyint) y `licenciaUsoSuelo: "https://..."` (archivo).
-
 ---
 
-## 6. Autenticación — contratos clave
+## 6. Autenticación
 
-### 6.1 JWT / `request.user` (`AuthenticatedUser`)
+### 6.1 `AuthenticatedUser` (`request.user`)
 
 ```ts
-{
-  userId: number;
-  email: string;
-  idGrupo: number | null;
-  rol: number | null;
-}
+{ userId: number; email: string; idGrupo: number | null; rol: number | null }
 ```
-
-Origen: access token (`id`, `email`, `idGrupo`, `rol`, `type: 'access'`).
 
 ### 6.2 `GET /login/me`
 
-```json
-{
-  "id": 1,
-  "nombre": "...",
-  "apellidoPaterno": "...",
-  "apellidoMaterno": "...",
-  "nombreCompleto": "...",
-  "UserName": "correo@dominio",
-  "PhoneNumber": "5512345678",
-  "permisos": ["1", "2"],
-  "logo": null,
-  "nombreRol": "...",
-  "nombreGrupo": "...",
-  "ultimoLogin": "2026-07-20T18:00:00.000Z"
-}
-```
+Incluye: `UserName`, `PhoneNumber`, `permisos`, `nombreRol`, `nombreGrupo`, `ultimoLogin`.
 
 ---
 
 ## 7. Usuarios — visibilidad GET
 
-Alcance según **rol del JWT** (no según filtros del cliente):
+| Rol token | List / paginado | Por grupo | Por ID |
+|-----------|-----------------|-----------|--------|
+| 4 | Todos | Cualquier | Sin filtro alcance |
+| 3 | Excepto IdRol 4 | Excepto IdRol 4 | Sin filtro alcance |
+| 2 | Mismo grupo y ≠ rol 4 | Solo su grupo; otro → 403 | Sin filtro alcance |
+| 1 | 403 | 403 | Sin filtro alcance |
 
-| Rol token | List / paginado | Por grupo (`/list/grupo/:id`) | Por ID (`/:id`) |
-|-----------|-----------------|-------------------------------|-----------------|
-| 4 | Todos | Cualquier grupo | Sin filtro de alcance |
-| 3 | Todos excepto `IdRol = 4` | Cualquier grupo, excepto usuarios rol 4 | Sin filtro de alcance |
-| 2 | `IdGrupo = token` y `IdRol <> 4` | Solo si `:id` = grupo del token; si no → **403** | Sin filtro de alcance |
-| 1 | **403** | **403** | Sin filtro de alcance (JWT válido) |
-| 2 sin grupo | **403** | **403** | — |
-
-Relación real: `Usuarios.IdRol` (un rol) y `Usuarios.IdGrupo` (un grupo).
-
-Paginación: `paginated.total` = solo usuarios visibles.
+Paginación: `total` = solo visibles. Relación: `Usuarios.IdRol` / `Usuarios.IdGrupo`.
 
 ---
 
@@ -462,17 +368,18 @@ Paginación: `paginated.total` = solo usuarios visibles.
 
 | Nombre antiguo | Sustituto |
 |----------------|-----------|
+| `ProteccionCivil.ContactoRepresentante.*` | `Licencias.ContactoRepresentante.*` |
 | `LicenciaConstruccion.constanciaAlineamientoyNumero` (multi) | `constanciaAlineamiento` (10) + `constanciaNumero` (29) |
 | `LicenciaConstruccion.LicenciaUsoyPlano` (multi) | `LicenciaUsoSuelo` (11) + `PlanoAutorizado` (12) |
 | `LicenciaConstruccion.JuegoDePlanosArquitectonicos` (multi) | `JuegoDePlanosArquitectonicos1\|2\|3` (17, 31, 32) |
 
 ---
 
-## 9. Referencia Swagger
+## 9. Swagger (referencia)
 
-- POST / PATCH registros: esquemas en controladores (`registros.controller.ts`, `registros-actualizar.controller.ts`), incluye `LicenciaConstruccion.ClaveCatastral`.
-- GET detalle: `RegistroDetalleResponseDto` / `RegistroDetalleLicenciaConstruccionDto` en `src/registros/dto/registro-detalle-response.dto.ts` (reutilizado por monitoreo).
-- Usuarios / roles / login: descripciones de visibilidad y respuestas 401/403 en sus controladores.
+- POST/PATCH: controladores de registros; incluyen `Licencias.RazonSocial`, `Licencias.ContactoRepresentante.*`, `LicenciaConstruccion.ClaveCatastral`.
+- GET detalle: `RegistroDetalleLicenciaConstruccionDto` (+ mapper de Licencias en monitoreo).
+- Usuarios / roles / login: visibilidad y 401/403 en sus controladores.
 
 ---
 

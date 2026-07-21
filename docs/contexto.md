@@ -4,7 +4,7 @@ Documento de contexto funcional y técnico. Resume lo implementado en registros,
 
 Stack: **NestJS 11**, **TypeORM 0.3**, **MySQL 8**, `multipart/form-data` (Multer), JWT + roles.
 
-Última actualización: **2026-07-20**.
+Última actualización: **2026-07-21**.
 
 ---
 
@@ -14,8 +14,8 @@ API de captura y seguimiento de licencias municipales (predio / obra). Un regist
 
 | PredioObra | Significado | Secciones principales |
 |------------|-------------|------------------------|
-| `0` | No construcción / predio | Sapac, Catastro, Licencias (+ Contacto + ContactoRepresentante), ProteccionCivil, fotos en `Fotos` |
-| `1` | En construcción | LicenciaConstruccion (+ Corresponsables), fotos en `FotosLicenciaConstruccion` |
+| `0` | No construcción / predio | Sapac, Catastro, Licencias (+ Contacto + ContactoRepresentante + RazonSocial), ProteccionCivil, fotos en `Fotos` |
+| `1` | En construcción | LicenciaConstruccion (+ Corresponsables + ClaveCatastral), fotos en `FotosLicenciaConstruccion` |
 
 Además existen **fotos transversales** de Licencias (`fachada`, `estacionamiento`, `bodega`) que se procesan en **ambos** valores de `PredioObra`.
 
@@ -42,38 +42,38 @@ Además existen **fotos transversales** de Licencias (`fachada`, `estacionamient
 
 ### 3.1 Creación — `POST /registros`
 
-- Multipart plano con notación de puntos (`Sapac.NumeroCuenta`, `LicenciaConstruccion.Corresponsables[0].NombreCompleto`, etc.).
+- Multipart plano con notación de puntos (`Sapac.NumeroCuenta`, `Licencias.RazonSocial`, `Licencias.ContactoRepresentante.Nombre`, `LicenciaConstruccion.Corresponsables[0].NombreCompleto`, etc.).
 - `Estatus` fijo en `4`; `Registro` (folio) en `null`; capturista/grupo salen del JWT (`CapturistaVisita`).
-- Flujo `PredioObra = 0`: crea Sapac/Catastro/Licencias/ProteccionCivil (aunque vengan vacíos); Contacto / ContactoRepresentante (bajo Licencias) solo con datos útiles.
+- Flujo `PredioObra = 0`: crea Sapac/Catastro/Licencias/ProteccionCivil (aunque vengan vacíos); Contacto / ContactoRepresentante solo con datos útiles.
 - Flujo `PredioObra = 1`: crea `LicenciaConstruccion` (constraint único por `IdRegistro`) + corresponsables + archivos LC.
 - Archivos LC: **un campo multipart por `IdTipoFoto`**, `maxCount: 1`, fila en `FotosLicenciaConstruccion`.
-- Escalares de LC: `NumeroExpediente`, `NumeroControl`, `SeguimientoObra` (varchar ≤ 50), **`ClaveCatastral`** (varchar ≤ 100, texto; no confundir con `Catastro.Clave`), indicadores tinyint `0|1` (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, …, `Otros`).
-- Escalares de Licencias (PredioObra = 0): incluye **`RazonSocial`** (varchar ≤ 200; distinto de `ProteccionCivil.RazonSocial` y de `NombreComercial`).
-- Fotos transversales `Licencias.fachada|estacionamiento|bodega` se guardan aunque `PredioObra = 1` (tabla `Fotos`, tipos 6/7/8). El resto de datos de Licencias **sí** respeta PredioObra.
+- Escalares de **LicenciaConstruccion** (PredioObra = 1): `NumeroExpediente`, `NumeroControl`, `SeguimientoObra` (varchar ≤ 50), **`ClaveCatastral`** (varchar ≤ 100, texto), indicadores tinyint `0|1`.
+- Escalares de **Licencias** (PredioObra = 0): incluye **`RazonSocial`** (varchar ≤ 200).
+- Fotos transversales `Licencias.fachada|estacionamiento|bodega` se guardan aunque `PredioObra = 1`. El resto de datos de Licencias (incluido `RazonSocial` y `ContactoRepresentante`) **sí** respeta PredioObra.
 
 ### 3.2 Actualización — `PATCH /registros_actualizar`
 
 - Actualización **parcial**: `undefined` / `null` / `''` / solo espacios **no sobrescriben**; el valor `0` sí es válido.
-- `idRegistro` obligatorio en el body. **No** se modifica `Estatus` (usar `PATCH /registros/:idRegistro/estatus`).
+- `idRegistro` obligatorio. **No** se modifica `Estatus` (usar `PATCH /registros/:idRegistro/estatus`).
 - `PredioObra efectivo`: body si viene; si no, el almacenado.
-- Flujo 0: upsert de Sapac/Catastro/Licencias/PC + fotos en `Fotos` con reemplazo no destructivo (`IdRegistro + IdTipoFoto` → actualizar solo `Ruta`, conservar archivo físico).
-- Flujo 1: upsert de LicenciaConstruccion / Corresponsables + archivos LC individuales con la misma regla en `FotosLicenciaConstruccion` (`IdLicenciaConstruccion + IdTipoFoto`). Incluye actualización parcial de `ClaveCatastral` (solo con PredioObra efectivo = 1; cadenas vacías no borran).
-- Corresponsables: con `Id` actualiza; sin `Id` crea; omitidos **no se borran**.
-- Transversales: con PredioObra efectivo `1` se procesan solo `fachada`/`estacionamiento`/`bodega`; los atributos textuales de Licencias/Contacto se **ignoran** (no se borran).
-- Colisión body/archivo: campos como `LicenciaConstruccion.LicenciaUsoSuelo` pueden ser tinyint en body y archivo multipart a la vez; el parser conserva el escalar cuando el nombre también es de archivo.
+- Flujo 0: upsert Sapac/Catastro/Licencias (incluye `RazonSocial`, Contacto, ContactoRepresentante)/PC + fotos en `Fotos` (reemplazo no destructivo de `Ruta`).
+- Flujo 1: upsert LicenciaConstruccion (incluye `ClaveCatastral`) / Corresponsables + archivos LC. Datos textuales de Licencias se **ignoran** (no se borran).
+- Un solo campo útil (`Licencias.RazonSocial`, `Licencias.ContactoRepresentante.*`, `LicenciaConstruccion.ClaveCatastral`, etc.) cuenta como cambio válido.
+- Transversales con PredioObra efectivo `1`: solo `fachada`/`estacionamiento`/`bodega`.
+- Colisión body/archivo en LC: el parser conserva el escalar tinyint cuando el nombre también es de archivo.
 
 ### 3.3 Lectura — detalle `GET /registros/:idRegistro` y `GET /monitoreo/:idRegistro`
 
 - Misma respuesta (wrapper `{ data }`).
-- Campos planos del registro + CapturistaVisita / capturista / supervisor / grupos + arreglo `fotos` (tipos **6, 7, 8**), **sin depender de PredioObra**.
-- Si `PredioObra = 0`: anida Sapac, Catastro, Licencias, ProteccionCivil (con URLs de fotos 1–9 embebidas).
-- Si `PredioObra = 1`: anida `LicenciaConstruccion` con escalares (incluye `ClaveCatastral: string | null`) + Corresponsables + **16 URLs nominales** de `FotosLicenciaConstruccion` (o `null`).
-- Duplicados históricos: se elige la fila de **Id mayor** por tipo; no se escribe en BD desde el GET.
-- Nombres antiguos de salida **eliminados**: `constanciaAlineamientoyNumero`, `LicenciaUsoyPlano`, `JuegoDePlanosArquitectonicos` (arrays).
+- Campos planos del registro + visita/capturista/supervisor/grupos + arreglo `fotos` (tipos **6, 7, 8**), independiente de `PredioObra`.
+- Si `PredioObra = 0`: anida Sapac, Catastro, **Licencias** (con `RazonSocial`, `Contacto`, `ContactoRepresentante`), ProteccionCivil (sin ContactoRepresentante; con su propio `RazonSocial`).
+- Si `PredioObra = 1`: anida `LicenciaConstruccion` (incluye `ClaveCatastral: string | null`) + Corresponsables + **16 URLs nominales** de fotos LC.
+- Duplicados históricos de fotos: fila de **Id mayor** por tipo; GET no escribe en BD.
+- Nombres antiguos eliminados: `constanciaAlineamientoyNumero`, `LicenciaUsoyPlano`, `JuegoDePlanosArquitectonicos` (arrays).
 
 ### 3.4 Otros endpoints de registros / monitoreo
 
-- `GET /registros` — listado paginado con visibilidad por rol.
+- `GET /registros` — listado paginado con visibilidad por rol (incluye `razonSocial` de Licencias en el item plano).
 - `POST /registros/por-rango-fechas` — filtro por fechas.
 - `PATCH /registros/:idRegistro/estatus` — cambio de estatus (roles 2/3/4).
 - `GET /monitoreo` — listado plano (sin wrapper `data`).
@@ -81,33 +81,29 @@ Además existen **fotos transversales** de Licencias (`fachada`, `estacionamient
 ### 3.5 Autenticación — `src/auth/`
 
 - Login (`POST /login`), refresh, logout.
-- `GET /login/me`: perfil del usuario autenticado (`id`, nombre completo, `UserName`, `PhoneNumber`, `permisos`, `nombreRol`, `nombreGrupo`, `ultimoLogin`).
+- `GET /login/me`: `id`, nombre completo, `UserName`, `PhoneNumber`, `permisos`, `nombreRol`, `nombreGrupo`, `ultimoLogin`.
 - Login actualiza `Usuarios.UltimoLogin`.
-- JWT access payload / `request.user` (`AuthenticatedUser`): `userId`, `email`, `idGrupo`, `rol`.
+- JWT / `request.user` (`AuthenticatedUser`): `userId`, `email`, `idGrupo`, `rol`.
 
 ### 3.6 Usuarios — visibilidad en GET
 
-Endpoints GET del módulo `usuarios` (excepto consulta por ID):
+| Rol JWT | List / paginado | Por grupo | Por ID |
+|---------|-----------------|-----------|--------|
+| **4** | Todos | Cualquier grupo | Sin filtro de alcance |
+| **3** | Todos excepto `IdRol = 4` | Cualquier grupo, excepto rol 4 | Sin filtro de alcance |
+| **2** | Mismo `IdGrupo` del token y `IdRol <> 4` | Solo su grupo del token; otro → **403** | Sin filtro de alcance |
+| **1** | **403** | **403** | Sin filtro de alcance |
+| Inválido / ausente | **403** | **403** | — |
+| Rol **2** sin grupo | **403** | **403** | — |
 
-| Rol JWT | Usuarios visibles |
-|---------|-------------------|
-| **4** | Todos |
-| **3** | Todos excepto `IdRol = 4` |
-| **2** | Mismo `IdGrupo` del token **y** `IdRol <> 4` |
-| **1** | Ninguno → **403** |
-| Rol ausente / inválido | **403** |
-| Rol **2** sin `IdGrupo` | **403** |
-
-- `GET /usuarios/list` y `GET /usuarios/:page/:limit`: filtro en SQL.
-- `GET /usuarios/list/grupo/:id`: aplica la misma matriz; rol 2 solo puede consultar **su** grupo del token (otro grupo → **403**).
-- `GET /usuarios/:id`: **sin** filtro de visibilidad por rol/grupo (solo por `Id`).
-- El alcance de seguridad sale **solo del JWT**, no de query/path/body.
-- POST / PATCH de usuarios no cambiaron por esta regla de listados.
+- Alcance solo del JWT (no de query/path/body).
+- Filtrado en SQL; `paginated.total` = usuarios visibles.
+- POST / PATCH de usuarios no cambiaron por esta regla.
 
 ### 3.7 Roles
 
-- Clase protegida con `@Roles(4)`.
-- `GET /roles/list` y paginado: listan roles **sin** filtrar por el rol del token (el guard sigue exigiendo rol 4 para entrar al módulo).
+- Clase `@Roles(4)`.
+- `GET /roles/list` y paginado: sin filtro adicional por rol del token.
 
 ---
 
@@ -121,17 +117,15 @@ Licencias.estacionamiento → IdTipoFoto 7
 Licencias.bodega          → IdTipoFoto 8
 ```
 
-| PredioObra efectivo | Datos Licencias / Contacto | Archivos 6/7/8 |
-|---------------------|----------------------------|----------------|
+| PredioObra efectivo | Datos Licencias / Contacto / ContactoRepresentante / RazonSocial | Archivos 6/7/8 |
+|---------------------|------------------------------------------------------------------|----------------|
 | `0` | Sí | Sí (si llegan) |
-| `1` | No (se ignoran) | Sí (si llegan) |
-
-Si el archivo no llega: no se toca la fila ni la ruta.
+| `1` | No (se ignoran; no se borran) | Sí (si llegan) |
 
 ### 4.2 Reemplazo no destructivo (PATCH)
 
 1. Guardar archivo nuevo (UUID, carpeta `{idRegistro}/{idTipoFoto}/`).
-2. Buscar fila existente por clave de negocio.
+2. Buscar fila por clave de negocio.
 3. Si existe → conservar `Id`, actualizar solo `Ruta` (+ `FechaHora` en LC).
 4. Si no → crear fila.
 5. **No** eliminar el archivo físico anterior.
@@ -175,66 +169,66 @@ JPG / JPEG / PNG / PDF.
 | 26 | `FirmaDRO` |
 | 27 | `FirmaCorresponsable` |
 | 28 | `FirmaResponsableRecepcionDocumento` |
-| 29 | `constanciaNumero` (Número Oficial) |
-| 30 | Recibo Servicios Municipales (**sin** atributo nominal en GET; ver contratos) |
+| 29 | `constanciaNumero` |
+| 30 | Recibo Servicios Municipales (**sin** atributo nominal en GET) |
 | 31 | `JuegoDePlanosArquitectonicos2` |
 | 32 | `JuegoDePlanosArquitectonicos3` |
 
-Fuente única: `LC_FILE_TIPO_FOTO` en `licencia-construccion.constants.ts`.
+Fuente: `LC_FILE_TIPO_FOTO` / `LC_RESPONSE_PHOTO_MAP` en `licencia-construccion.constants.ts`.
 
 ---
 
-## 6. Colisión dato vs archivo en respuesta GET
+## 6. Colisión dato vs archivo en GET
 
-La tabla `LicenciaConstruccion` tiene indicadores tinyint con nombres PascalCase (`LicenciaUsoSuelo`, `PlanoAutorizado`, `LicenciaFraccionamiento`). En el mismo objeto de respuesta, las URLs de archivo se exponen en **camelCase** (`licenciaUsoSuelo`, `planoAutorizado`, `licenciaFraccionamiento`), misma convención que `Estacionamiento` (dato) vs `estacionamiento` (archivo) en Licencias.
-
-Mapa de salida: `LC_RESPONSE_PHOTO_MAP`.
+Indicadores tinyint PascalCase (`LicenciaUsoSuelo`, …) vs URLs camelCase (`licenciaUsoSuelo`, …). Misma idea en Licencias: `Estacionamiento` (dato) vs `estacionamiento` (archivo).
 
 ---
 
-## 7. Seguridad y roles
+## 7. Seguridad y campos homónimos
 
 ### 7.1 Registros / monitoreo
 
 - Guards: `JwtAuthGuard` + `RolesGuard`.
-- Detalle / listados:
-  - Rol **4 / 3**: todos los registros.
-  - Rol **2**: registros de su `IdGrupo` (vía `CapturistaVisita`).
-  - Rol **1**: registros donde figura como capturista.
-- El detalle de fotos **no** cambia permisos.
+- Rol **4 / 3**: todos los registros · **2**: por `IdGrupo` (CapturistaVisita) · **1**: como capturista.
 
-### 7.2 Usuarios (listados)
+### 7.2 Usuarios
 
-Ver matriz en §3.6. Filtrado en SQL; paginación sobre el conjunto visible.
+Ver §3.6. Distinto criterio que registros.
 
-### 7.3 Campos distintos: Catastro vs LC
+### 7.3 Campos que no deben mezclarse
 
-| Campo | Tabla | Uso |
-|-------|--------|-----|
-| `Catastro.Clave` | Catastro | Clave de predio (flujo PredioObra = 0) |
-| `LicenciaConstruccion.ClaveCatastral` | LicenciaConstruccion | Clave catastral de la licencia (flujo PredioObra = 1) |
+| Campo público | Tabla | Flujo |
+|---------------|--------|-------|
+| `Catastro.Clave` | Catastro | PredioObra = 0 |
+| `LicenciaConstruccion.ClaveCatastral` | LicenciaConstruccion | PredioObra = 1 |
+| `Licencias.RazonSocial` | Licencias | PredioObra = 0 |
+| `ProteccionCivil.RazonSocial` | ProteccionCivil | PredioObra = 0 |
+| `Licencias.NombreComercial` | Licencias | Nombre comercial (≠ razón social) |
+| `Licencias.Contacto` | Contactos (`IdRegistro`) | PredioObra = 0 |
+| `Licencias.ContactoRepresentante` | ContactoRepresentante (`IdRegistro`) | PredioObra = 0 |
 
-No se sincronizan automáticamente.
+**Obsoleto (no usar):** `ProteccionCivil.ContactoRepresentante.*` → sustituido por `Licencias.ContactoRepresentante.*`.
+
+No hay sincronización automática entre homónimos.
 
 ---
 
-## 8. Decisiones de diseño importantes
+## 8. Decisiones de diseño
 
-1. **No migraciones** en estas tareas: la BD ya tiene columnas/tablas; el backend se alinea al esquema.
-2. **Un archivo = un IdTipoFoto** en LC (se eliminó el modelo multi-archivo / campos agrupados en el contrato activo de POST/PATCH/GET).
-3. **Actualización no destructiva** de rutas: orphan files en disco son aceptables frente a complejidad de rollback.
-4. **GET no escribe** y no oculta fotos existentes por el valor actual de `PredioObra`.
-5. Constantes legacy (`LICENCIA_CONSTRUCCION_DOCUMENTO_TIPO_FOTO`, `FIRMA_TIPO_FOTO`, etc.) pueden permanecer en código por métodos de storage antiguos; el contrato público vigente es `LC_FILE_TIPO_FOTO` / `LC_RESPONSE_PHOTO_MAP`.
-6. **`ClaveCatastral`** se trata como texto (conserva ceros, guiones, separadores); no se parsea a número.
-7. Visibilidad de **usuarios** en listados ≠ visibilidad de **registros** (criterios distintos).
+1. **No migraciones** en estas tareas: el backend se alinea al esquema existente.
+2. **Un archivo = un IdTipoFoto** en LC.
+3. **Actualización no destructiva** de rutas de fotos.
+4. **GET no escribe** y no oculta fotos por el `PredioObra` actual.
+5. Contrato público vigente de archivos LC: `LC_FILE_TIPO_FOTO` / `LC_RESPONSE_PHOTO_MAP`.
+6. `ClaveCatastral` y claves similares se tratan como **texto** (ceros, guiones, separadores).
+7. ContactoRepresentante: relación física por `IdRegistro`; agrupación lógica bajo Licencias.
+8. Visibilidad de usuarios ≠ visibilidad de registros.
 
 ---
 
 ## 9. Pruebas
 
-Suites relevantes: `registros`, `registros_actualizar`, `monitoreo`, `lc-archivos-post`, `licencias-fotos-transversales`, `usuarios.service.spec`.
-
-Comandos:
+Suites: `registros`, `registros_actualizar`, `monitoreo`, `lc-archivos-post`, `licencias-fotos-transversales`, `usuarios.service.spec`, `registros-catalogos-post`.
 
 ```bash
 npm run build
@@ -247,13 +241,14 @@ npx jest
 
 | Tema | Ubicación |
 |------|-----------|
-| Constantes LC archivos / GET | `src/registros/licencia-construccion.constants.ts` |
-| Transversales Licencias | `src/registros/licencias.constants.ts` |
-| POST create | `src/registros/registros.service.ts` |
-| PATCH update | `src/registros_actualizar/registros-actualizar.service.ts` |
+| Constantes LC | `src/registros/licencia-construccion.constants.ts` |
+| Constantes Licencias / ContactoRepresentante | `src/registros/licencias.constants.ts` |
+| POST | `src/registros/registros.service.ts` |
+| PATCH | `src/registros_actualizar/registros-actualizar.service.ts` |
 | Detalle GET | `src/monitoreo/monitoreo.service.ts` |
-| DTO Swagger detalle | `src/registros/dto/registro-detalle-response.dto.ts` |
+| DTO detalle LC | `src/registros/dto/registro-detalle-response.dto.ts` |
+| Entidad Licencias | `src/entities/Licencias.ts` |
+| Entidad ContactoRepresentante | `src/entities/ContactoRepresentante.ts` |
+| Entidad LicenciaConstruccion | `src/entities/LicenciaConstruccion.ts` |
 | JWT / me | `src/auth/jwt.strategy.ts`, `src/auth/auth.service.ts` |
 | Visibilidad usuarios | `src/usuarios/usuarios.service.ts` |
-| Entidad LC | `src/entities/LicenciaConstruccion.ts` |
-| Entidad Usuarios | `src/entities/Usuarios.ts` |
