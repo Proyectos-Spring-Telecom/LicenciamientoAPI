@@ -214,6 +214,14 @@ Actualiza columnas de \`Registros\` y secciones según el PredioObra efectivo
           nullable: true,
         },
         'Licencias.RFC': { type: 'string', maxLength: 16, nullable: true },
+        'Licencias.RazonSocial': {
+          type: 'string',
+          maxLength: 200,
+          nullable: true,
+          example: 'Nueva Razón Social, S.A. de C.V.',
+          description:
+            'Actualiza parcialmente la razón social de la licencia cuando PredioObra efectivo es 0.',
+        },
         'Licencias.FechaExpedicion': {
           type: 'string',
           format: 'date-time',

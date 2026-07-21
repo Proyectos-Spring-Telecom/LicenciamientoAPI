@@ -153,6 +153,18 @@ export class CreateLicenciaDto {
   @ApiPropertyOptional()
   RFC?: string;
 
+  @Transform(emptyToUndefined)
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  @ApiPropertyOptional({
+    maxLength: 200,
+    example: 'Comercializadora Ejemplo, S.A. de C.V.',
+    description:
+      'Razón social de la persona moral asociada a la licencia.',
+  })
+  RazonSocial?: string;
+
   @Transform(toOptionalDateString)
   @IsOptional()
   @IsDateString({}, { message: 'FechaExpedicion debe ser una fecha válida' })

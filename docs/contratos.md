@@ -92,9 +92,11 @@ No enviar: `Estatus`, `Registro` (folio), `IdCapturista`, `IdGrupo`.
 
 ### 3.2 PredioObra = 0 — textos
 
-Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `Licencias.ContactoRepresentante.*`, `ProteccionCivil.*`.
+Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*` (incluye `RazonSocial`, `Contacto.*`, `ContactoRepresentante.*`), `ProteccionCivil.*`.
 
 El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. `Licencias.Contacto` y `Licencias.ContactoRepresentante` solo con datos útiles (tabla `ContactoRepresentante` por `IdRegistro`).
+
+`Licencias.RazonSocial` (varchar 200) es independiente de `ProteccionCivil.RazonSocial` y de `Licencias.NombreComercial`. Solo aplica con PredioObra = 0.
 
 `Catastro.Clave` es independiente de `LicenciaConstruccion.ClaveCatastral`.
 
@@ -313,8 +315,8 @@ Solo tipos **6, 7, 8** en este arreglo. Independiente de `PredioObra`. Vacío `[
 ### 5.2 Si `predioObra === 0`
 
 Objetos anidados: `Sapac`, `Catastro`, `Licencias`, `ProteccionCivil` (pueden ser `null`).  
-Dentro de `Licencias`: `Contacto` y `ContactoRepresentante` (mismo patrón de campos nulos cuando no hay fila).  
-`ProteccionCivil` **no** incluye `ContactoRepresentante`.  
+Dentro de `Licencias`: `Contacto`, `ContactoRepresentante` y escalares incluyendo `RazonSocial` (`string | null`, max 200).  
+`ProteccionCivil` **no** incluye `ContactoRepresentante`. Su `RazonSocial` es un campo distinto al de Licencias.  
 URLs embebidas: `reciboSapac`, `caratulamedidor`, `cuadromedidor`, `reciboPredial`, `licenciaFuncionamiento`, `fachada`, `estacionamiento`, `bodega`, `vistoBueno` → `string | null`.
 
 `Catastro.Clave` puede coexistir en la respuesta con `LicenciaConstruccion.ClaveCatastral` en otros registros; son campos distintos.

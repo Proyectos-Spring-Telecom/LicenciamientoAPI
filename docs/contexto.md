@@ -48,6 +48,7 @@ Además existen **fotos transversales** de Licencias (`fachada`, `estacionamient
 - Flujo `PredioObra = 1`: crea `LicenciaConstruccion` (constraint único por `IdRegistro`) + corresponsables + archivos LC.
 - Archivos LC: **un campo multipart por `IdTipoFoto`**, `maxCount: 1`, fila en `FotosLicenciaConstruccion`.
 - Escalares de LC: `NumeroExpediente`, `NumeroControl`, `SeguimientoObra` (varchar ≤ 50), **`ClaveCatastral`** (varchar ≤ 100, texto; no confundir con `Catastro.Clave`), indicadores tinyint `0|1` (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, …, `Otros`).
+- Escalares de Licencias (PredioObra = 0): incluye **`RazonSocial`** (varchar ≤ 200; distinto de `ProteccionCivil.RazonSocial` y de `NombreComercial`).
 - Fotos transversales `Licencias.fachada|estacionamiento|bodega` se guardan aunque `PredioObra = 1` (tabla `Fotos`, tipos 6/7/8). El resto de datos de Licencias **sí** respeta PredioObra.
 
 ### 3.2 Actualización — `PATCH /registros_actualizar`

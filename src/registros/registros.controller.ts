@@ -528,6 +528,14 @@ genera automáticamente una fila en CapturistaVisita con IdSupervisor=null.
           maxLength: 16,
           nullable: true,
         },
+        'Licencias.RazonSocial': {
+          type: 'string',
+          maxLength: 200,
+          nullable: true,
+          example: 'Comercializadora Ejemplo, S.A. de C.V.',
+          description:
+            'Razón social asociada a la licencia, utilizada principalmente para persona moral. Solo PredioObra=0.',
+        },
         'Licencias.FechaExpedicion': {
           type: 'string',
           format: 'date-time',
