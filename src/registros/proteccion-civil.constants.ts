@@ -26,14 +26,3 @@ export const PROTECCION_CIVIL_SCALAR_ATTRS = new Set([
   'RegistroAcreditacion',
   'TienePrograma',
 ]);
-
-export const CONTACTO_REPRESENTANTE_SCALAR_ATTRS = new Set([
-  'Nombre',
-  'ApellidoPaterno',
-  'ApellidoMaterno',
-  'Telefono',
-  'Correo',
-]);
-
-export const CONTACTO_REPRESENTANTE_FORM_PREFIX =
-  'ProteccionCivil.ContactoRepresentante.';

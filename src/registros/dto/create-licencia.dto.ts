@@ -10,6 +10,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { CreateContactoDto } from './create-contacto.dto';
+import { CreateContactoRepresentanteDto } from './create-contacto-representante.dto';
 
 function emptyToUndefined({ value }: { value: unknown }): unknown {
   if (
@@ -191,4 +192,11 @@ export class CreateLicenciaDto {
   @Type(() => CreateContactoDto)
   @ApiPropertyOptional({ type: CreateContactoDto })
   Contacto?: CreateContactoDto;
+
+  /** Solo estructura de formulario; no es columna de Licencias. Relación física por IdRegistro. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateContactoRepresentanteDto)
+  @ApiPropertyOptional({ type: CreateContactoRepresentanteDto })
+  ContactoRepresentante?: CreateContactoRepresentanteDto;
 }

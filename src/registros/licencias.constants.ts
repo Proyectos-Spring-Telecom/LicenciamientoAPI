@@ -66,3 +66,15 @@ export const CONTACTO_SCALAR_ATTRS = new Set([
 ]);
 
 export const CONTACTO_FORM_PREFIX = 'Licencias.Contacto.';
+
+export const CONTACTO_REPRESENTANTE_SCALAR_ATTRS = new Set([
+  'Nombre',
+  'ApellidoPaterno',
+  'ApellidoMaterno',
+  'Telefono',
+  'Correo',
+]);
+
+/** Debe evaluarse antes que CONTACTO_FORM_PREFIX (prefijo más específico). */
+export const CONTACTO_REPRESENTANTE_FORM_PREFIX =
+  'Licencias.ContactoRepresentante.';

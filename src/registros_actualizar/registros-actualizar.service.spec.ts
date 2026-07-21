@@ -202,14 +202,58 @@ describe('parseRegistroActualizarMultipart', () => {
       {
         idRegistro: '10',
         'ProteccionCivil.EsEmpresa': '1',
-        'ProteccionCivil.ContactoRepresentante.Nombre': 'sin registro',
-        'ProteccionCivil.ContactoRepresentante.Correo': 'sin registro',
+        'Licencias.ContactoRepresentante.Nombre': 'sin registro',
+        'Licencias.ContactoRepresentante.Correo': 'sin registro',
       },
       0,
     );
     expect(parsed.hasContactoRepresentante).toBe(true);
     expect(parsed.contactoRepresentante?.Nombre).toBe('sin registro');
     expect(parsed.contactoRepresentante?.Correo).toBeUndefined();
+  });
+
+  it('parsea Licencias.ContactoRepresentante y no ProteccionCivil.ContactoRepresentante', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.ContactoRepresentante.Nombre': 'Juan',
+        'Licencias.ContactoRepresentante.Telefono': '7771234567',
+        'Licencias.ContactoRepresentante.Correo': 'juan@example.com',
+      },
+      0,
+    );
+    expect(parsed.hasContactoRepresentante).toBe(true);
+    expect(parsed.contactoRepresentante).toEqual(
+      expect.objectContaining({
+        Nombre: 'Juan',
+        Telefono: '7771234567',
+        Correo: 'juan@example.com',
+      }),
+    );
+    expect(parsed.hasProteccionCivil).toBe(false);
+
+    await expect(
+      parseRegistroActualizarMultipart(
+        {
+          idRegistro: '10',
+          'ProteccionCivil.ContactoRepresentante.Nombre': 'Juan',
+        },
+        0,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('ignora Licencias.ContactoRepresentante cuando PredioObra efectivo es 1', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        PredioObra: '1',
+        'Licencias.ContactoRepresentante.Nombre': 'No debe guardar',
+      },
+      1,
+    );
+    expect(parsed.hasContactoRepresentante).toBe(false);
+    expect(parsed.contactoRepresentante).toBeUndefined();
   });
 
   it('rechaza Correo con @ inválido', async () => {

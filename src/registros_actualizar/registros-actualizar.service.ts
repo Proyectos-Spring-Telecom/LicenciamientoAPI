@@ -279,31 +279,28 @@ export class RegistrosActualizarService {
           }
           if (
             (parsed.hasLicencias && parsed.licencias) ||
-            (parsed.hasContacto && parsed.contacto)
+            (parsed.hasContacto && parsed.contacto) ||
+            (parsed.hasContactoRepresentante && parsed.contactoRepresentante)
           ) {
-            const lic = await this.upsertLicenciasYContacto(
+            const lic = await this.upsertLicenciasContactoYRepresentante(
               manager,
               idRegistro,
               parsed.hasLicencias ? parsed.licencias : undefined,
               parsed.hasContacto ? parsed.contacto : undefined,
-            );
-            idLicencia = lic.idLicencia;
-            contacto = lic.contacto;
-          }
-          if (
-            (parsed.hasProteccionCivil && parsed.proteccionCivil) ||
-            (parsed.hasContactoRepresentante && parsed.contactoRepresentante)
-          ) {
-            const pc = await this.upsertProteccionCivilYRepresentante(
-              manager,
-              idRegistro,
-              parsed.hasProteccionCivil ? parsed.proteccionCivil : undefined,
               parsed.hasContactoRepresentante
                 ? parsed.contactoRepresentante
                 : undefined,
             );
-            idProteccionCivil = pc.idProteccionCivil;
-            contactoRepresentante = pc.contactoRepresentante;
+            idLicencia = lic.idLicencia;
+            contacto = lic.contacto;
+            contactoRepresentante = lic.contactoRepresentante;
+          }
+          if (parsed.hasProteccionCivil && parsed.proteccionCivil) {
+            idProteccionCivil = await this.upsertProteccionCivil(
+              manager,
+              idRegistro,
+              parsed.proteccionCivil,
+            );
           }
 
           if (fotos0.needsSapac && idSapac == null) {
@@ -860,14 +857,16 @@ export class RegistrosActualizarService {
     return Number(saved.id);
   }
 
-  private async upsertLicenciasYContacto(
+  private async upsertLicenciasContactoYRepresentante(
     manager: EntityManager,
     idRegistro: number,
     licenciaDto: UpdateLicenciasDto | undefined,
     contactoDto: UpdateContactoDto | undefined,
+    representanteDto: UpdateContactoRepresentanteDto | undefined,
   ): Promise<{
     idLicencia: number | null;
     contacto: { id: number } | null;
+    contactoRepresentante: { id: number } | null;
   }> {
     let licencia = await manager.findOne(Licencias, {
       where: { idRegistro },
@@ -901,7 +900,7 @@ export class RegistrosActualizarService {
         licencia.fechaHora = new Date(licenciaDto.FechaHora!);
       }
       licencia = await manager.save(Licencias, licencia);
-    } else if (contactoDto && !licencia) {
+    } else if ((contactoDto || representanteDto) && !licencia) {
       licencia = await manager.save(
         Licencias,
         manager.create(Licencias, { idRegistro }),
@@ -928,49 +927,6 @@ export class RegistrosActualizarService {
       contactoResult = { id: Number(saved.id) };
     }
 
-    return {
-      idLicencia: licencia ? Number(licencia.id) : null,
-      contacto: contactoResult,
-    };
-  }
-
-  private async upsertProteccionCivilYRepresentante(
-    manager: EntityManager,
-    idRegistro: number,
-    pcDto: UpdateProteccionCivilDto | undefined,
-    representanteDto: UpdateContactoRepresentanteDto | undefined,
-  ): Promise<{
-    idProteccionCivil: number | null;
-    contactoRepresentante: { id: number } | null;
-  }> {
-    let pc = await manager.findOne(ProteccionCivil, {
-      where: { idRegistro },
-      order: { id: 'DESC' },
-    });
-
-    if (pcDto) {
-      if (!pc) {
-        pc = manager.create(ProteccionCivil, { idRegistro });
-      }
-      assignUseful(pc, {
-        esEmpresa: pcDto.EsEmpresa,
-        razonSocial: pcDto.RazonSocial,
-        rfc: pcDto.RFC,
-        nombre: pcDto.Nombre,
-        apellidoPaterno: pcDto.ApellidoPaterno,
-        apellidoMaterno: pcDto.ApellidoMaterno,
-        telefono: pcDto.Telefono,
-        registroAcreditacion: pcDto.RegistroAcreditacion,
-        tienePrograma: pcDto.TienePrograma,
-      });
-      pc = await manager.save(ProteccionCivil, pc);
-    } else if (representanteDto && !pc) {
-      pc = await manager.save(
-        ProteccionCivil,
-        manager.create(ProteccionCivil, { idRegistro }),
-      );
-    }
-
     let representanteResult: { id: number } | null = null;
     if (representanteDto) {
       let representante = await manager.findOne(ContactoRepresentante, {
@@ -992,8 +948,37 @@ export class RegistrosActualizarService {
     }
 
     return {
-      idProteccionCivil: pc ? Number(pc.id) : null,
+      idLicencia: licencia ? Number(licencia.id) : null,
+      contacto: contactoResult,
       contactoRepresentante: representanteResult,
     };
+  }
+
+  private async upsertProteccionCivil(
+    manager: EntityManager,
+    idRegistro: number,
+    pcDto: UpdateProteccionCivilDto,
+  ): Promise<number | null> {
+    let pc = await manager.findOne(ProteccionCivil, {
+      where: { idRegistro },
+      order: { id: 'DESC' },
+    });
+
+    if (!pc) {
+      pc = manager.create(ProteccionCivil, { idRegistro });
+    }
+    assignUseful(pc, {
+      esEmpresa: pcDto.EsEmpresa,
+      razonSocial: pcDto.RazonSocial,
+      rfc: pcDto.RFC,
+      nombre: pcDto.Nombre,
+      apellidoPaterno: pcDto.ApellidoPaterno,
+      apellidoMaterno: pcDto.ApellidoMaterno,
+      telefono: pcDto.Telefono,
+      registroAcreditacion: pcDto.RegistroAcreditacion,
+      tienePrograma: pcDto.TienePrograma,
+    });
+    pc = await manager.save(ProteccionCivil, pc);
+    return Number(pc.id);
   }
 }

@@ -705,12 +705,13 @@ export class MonitoreoService {
     return {
       Sapac: this.mapSapac(sapac, fotosByTipo),
       Catastro: this.mapCatastro(catastro, fotosByTipo),
-      Licencias: this.mapLicencias(licencias, contacto, fotosByTipo),
-      ProteccionCivil: this.mapProteccionCivil(
-        proteccionCivil,
+      Licencias: this.mapLicencias(
+        licencias,
+        contacto,
         contactoRepresentante,
         fotosByTipo,
       ),
+      ProteccionCivil: this.mapProteccionCivil(proteccionCivil, fotosByTipo),
     };
   }
 
@@ -927,6 +928,7 @@ export class MonitoreoService {
   private mapLicencias(
     licencias: Licencias | null,
     contacto: Contactos | null,
+    contactoRepresentante: ContactoRepresentante | null,
     fotosByTipo: Map<number, FotoRow[]>,
   ) {
     const photos = {
@@ -945,6 +947,7 @@ export class MonitoreoService {
     if (
       !licencias &&
       !contacto &&
+      !contactoRepresentante &&
       !Object.values(photos).some((v) => v != null)
     ) {
       return null;
@@ -969,6 +972,9 @@ export class MonitoreoService {
       Tipo: licencias?.tipo ?? null,
       FechaHora: licencias?.fechaHora ?? null,
       Contacto: this.mapContacto(contacto),
+      ContactoRepresentante: this.mapContactoRepresentante(
+        contactoRepresentante,
+      ),
       ...photos,
     };
   }
@@ -986,7 +992,6 @@ export class MonitoreoService {
 
   private mapProteccionCivil(
     pc: ProteccionCivil | null,
-    representante: ContactoRepresentante | null,
     fotosByTipo: Map<number, FotoRow[]>,
   ) {
     const vistoBueno = this.singleFotoUrl(
@@ -994,7 +999,7 @@ export class MonitoreoService {
       PROTECCION_CIVIL_TIPO_FOTO.vistoBueno,
     );
 
-    if (!pc && !representante && vistoBueno == null) {
+    if (!pc && vistoBueno == null) {
       return null;
     }
 
@@ -1009,7 +1014,6 @@ export class MonitoreoService {
       Telefono: pc?.telefono ?? null,
       RegistroAcreditacion: pc?.registroAcreditacion ?? null,
       TienePrograma: pc?.tienePrograma ?? null,
-      ContactoRepresentante: this.mapContactoRepresentante(representante),
       vistoBueno,
     };
   }

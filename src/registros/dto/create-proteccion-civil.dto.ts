@@ -1,14 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsIn,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
-  ValidateNested,
 } from 'class-validator';
-import { CreateContactoRepresentanteDto } from './create-contacto-representante.dto';
 
 function emptyToUndefined({ value }: { value: unknown }): unknown {
   if (
@@ -132,11 +130,4 @@ export class CreateProteccionCivilDto {
     example: 1,
   })
   TienePrograma?: number;
-
-  /** Solo estructura de formulario; no es columna de ProteccionCivil. */
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => CreateContactoRepresentanteDto)
-  @ApiPropertyOptional({ type: CreateContactoRepresentanteDto })
-  ContactoRepresentante?: CreateContactoRepresentanteDto;
 }

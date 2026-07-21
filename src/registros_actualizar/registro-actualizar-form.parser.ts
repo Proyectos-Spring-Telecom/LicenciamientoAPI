@@ -12,12 +12,12 @@ import {
 } from 'src/registros/licencia-construccion.constants';
 import {
   CONTACTO_FORM_PREFIX,
+  CONTACTO_REPRESENTANTE_FORM_PREFIX,
+  CONTACTO_REPRESENTANTE_SCALAR_ATTRS,
   CONTACTO_SCALAR_ATTRS,
   LICENCIAS_SCALAR_ATTRS,
 } from 'src/registros/licencias.constants';
 import {
-  CONTACTO_REPRESENTANTE_FORM_PREFIX,
-  CONTACTO_REPRESENTANTE_SCALAR_ATTRS,
   PROTECCION_CIVIL_SCALAR_ATTRS,
 } from 'src/registros/proteccion-civil.constants';
 import { normalizePredioObra } from 'src/registros/licencia-construccion.sanitize';
@@ -257,23 +257,6 @@ export async function parseRegistroActualizarMultipart(
       continue;
     }
 
-    if (key.startsWith(CONTACTO_FORM_PREFIX)) {
-      if (predioObraEfectivo === 1) continue;
-      const attr = key.slice(CONTACTO_FORM_PREFIX.length);
-      assertAttrAllowed(key, attr, CONTACTO_SCALAR_ATTRS, FORBIDDEN_CONTACTO);
-      contactoRaw[attr] = value;
-      continue;
-    }
-
-    if (key.startsWith('Licencias.')) {
-      if (predioObraEfectivo === 1) continue;
-      const attr = key.slice('Licencias.'.length);
-      if (attr === 'Contacto' || attr.startsWith('Contacto.')) continue;
-      assertAttrAllowed(key, attr, LICENCIAS_SCALAR_ATTRS, FORBIDDEN_LICENCIAS);
-      licenciaRaw[attr] = value;
-      continue;
-    }
-
     if (key.startsWith(CONTACTO_REPRESENTANTE_FORM_PREFIX)) {
       if (predioObraEfectivo === 1) continue;
       const attr = key.slice(CONTACTO_REPRESENTANTE_FORM_PREFIX.length);
@@ -287,15 +270,33 @@ export async function parseRegistroActualizarMultipart(
       continue;
     }
 
-    if (key.startsWith('ProteccionCivil.')) {
+    if (key.startsWith(CONTACTO_FORM_PREFIX)) {
       if (predioObraEfectivo === 1) continue;
-      const attr = key.slice('ProteccionCivil.'.length);
+      const attr = key.slice(CONTACTO_FORM_PREFIX.length);
+      assertAttrAllowed(key, attr, CONTACTO_SCALAR_ATTRS, FORBIDDEN_CONTACTO);
+      contactoRaw[attr] = value;
+      continue;
+    }
+
+    if (key.startsWith('Licencias.')) {
+      if (predioObraEfectivo === 1) continue;
+      const attr = key.slice('Licencias.'.length);
       if (
+        attr === 'Contacto' ||
+        attr.startsWith('Contacto.') ||
         attr === 'ContactoRepresentante' ||
         attr.startsWith('ContactoRepresentante.')
       ) {
         continue;
       }
+      assertAttrAllowed(key, attr, LICENCIAS_SCALAR_ATTRS, FORBIDDEN_LICENCIAS);
+      licenciaRaw[attr] = value;
+      continue;
+    }
+
+    if (key.startsWith('ProteccionCivil.')) {
+      if (predioObraEfectivo === 1) continue;
+      const attr = key.slice('ProteccionCivil.'.length);
       assertAttrAllowed(
         key,
         attr,

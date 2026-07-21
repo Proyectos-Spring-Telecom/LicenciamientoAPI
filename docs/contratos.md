@@ -4,9 +4,13 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 
 Índice de contexto: [contexto.md](./contexto.md).
 
+Última actualización: **2026-07-20**.
+
 ---
 
 ## 1. Endpoints
+
+### 1.1 Registros / monitoreo / actualización
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
@@ -19,6 +23,40 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 | `POST` | `/registros/por-rango-fechas` | Listado por rango de fechas |
 | `PATCH` | `/registros/:idRegistro/estatus` | Cambiar estatus |
 
+### 1.2 Autenticación
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `POST` | `/login` | Inicio de sesión (actualiza `UltimoLogin`) |
+| `POST` | `/login/refresh` | Renovar access token |
+| `POST` | `/login/logout` | Cerrar sesión (revocar refresh) |
+| `GET` | `/login/me` | Perfil del usuario autenticado |
+| `POST` | `/login/usuario/recuperar/acceso` | Recuperación de acceso |
+| `POST` | `/login/cambiar/accesso` | Cambio de acceso (flujo de recuperación) |
+
+### 1.3 Usuarios
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/usuarios/list` | Lista completa (visibilidad por rol JWT) |
+| `GET` | `/usuarios/list/grupo/:id` | Usuarios activos por grupo (visibilidad JWT) |
+| `GET` | `/usuarios/:page/:limit` | Lista paginada (visibilidad JWT; `total` filtrado) |
+| `GET` | `/usuarios/:id` | Usuario por ID (**sin** filtro de visibilidad) |
+| `POST` | `/usuarios` | Crear usuario |
+| `PATCH` | `/usuarios/:id` | Actualizar datos |
+| `PATCH` | `/usuarios/estatus/:id` | Alternar estatus |
+| `PATCH` | `/usuarios/actualizar/contrasena/:id` | Cambiar contraseña |
+
+### 1.4 Roles
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| `GET` | `/roles/list` | Roles activos (módulo `@Roles(4)`; sin filtro adicional por rol del token) |
+| `GET` | `/roles/:page/:limit` | Roles paginados |
+| `GET` | `/roles/:id` | Rol por ID (+ permisos) |
+| `POST` | `/roles` | Crear rol |
+| `PATCH` | `/roles/estatus/:id` | Alternar estatus |
+
 ---
 
 ## 2. Multipart — reglas comunes
@@ -27,7 +65,7 @@ Contrato de API alineado al código vigente. Autenticación: `Authorization: Bea
 2. Campos planos con notación de puntos / índices.
 3. Valores `0` son válidos; no convertir a `boolean` ni a `null`.
 4. Archivos: JPG / JPEG / PNG / PDF; **máximo 1 archivo por campo** de LC y de fotos flujo 0.
-5. Prefijos de sección: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `ProteccionCivil.`, `ProteccionCivil.ContactoRepresentante.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
+5. Prefijos de sección: `Sapac.`, `Catastro.`, `Licencias.`, `Licencias.Contacto.`, `Licencias.ContactoRepresentante.`, `ProteccionCivil.`, `LicenciaConstruccion.`, `LicenciaConstruccion.Corresponsables[i].`.
 
 ### PredioObra efectivo
 
@@ -54,9 +92,11 @@ No enviar: `Estatus`, `Registro` (folio), `IdCapturista`, `IdGrupo`.
 
 ### 3.2 PredioObra = 0 — textos
 
-Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `ProteccionCivil.*`, `ProteccionCivil.ContactoRepresentante.*`.
+Secciones opcionales: `Sapac.*`, `Catastro.*`, `Licencias.*`, `Licencias.Contacto.*`, `Licencias.ContactoRepresentante.*`, `ProteccionCivil.*`.
 
-El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. Contactos solo con datos útiles.
+El backend **siempre crea** Sapac, Catastro, Licencias y ProteccionCivil. `Licencias.Contacto` y `Licencias.ContactoRepresentante` solo con datos útiles (tabla `ContactoRepresentante` por `IdRegistro`).
+
+`Catastro.Clave` es independiente de `LicenciaConstruccion.ClaveCatastral`.
 
 ### 3.3 PredioObra = 0 — archivos → tabla `Fotos`
 
@@ -90,6 +130,7 @@ LicenciaConstruccion.Fecha
 LicenciaConstruccion.NumeroExpediente          → string max 50
 LicenciaConstruccion.NumeroControl             → string max 50
 LicenciaConstruccion.SeguimientoObra           → string max 50 (no es indicador)
+LicenciaConstruccion.ClaveCatastral            → string max 100 | null (texto; no numérico)
 LicenciaConstruccion.ConstanciaAlineamiento    → 0|1
 LicenciaConstruccion.LicenciaUsoSuelo          → 0|1
 LicenciaConstruccion.PlanoAutorizado           → 0|1
@@ -101,6 +142,8 @@ LicenciaConstruccion.RecibosMunicipales        → 0|1
 LicenciaConstruccion.PlanoArquitectonicos      → 0|1
 LicenciaConstruccion.Otros                     → 0|1
 ```
+
+**`ClaveCatastral`:** opcional; trim; vacío/`null` → no se guarda (queda `NULL`). Conserva ceros iniciales, guiones y separadores. Solo aplica con `PredioObra = 1`.
 
 Corresponsables (sin `Id`):
 
@@ -176,6 +219,7 @@ No se procesan el resto de atributos de Licencias.
 - `0` sí actualiza.
 - **No** enviar `Estatus`.
 - Cambiar de flujo PredioObra **no borra** datos del otro flujo.
+- Solo `LicenciaConstruccion.ClaveCatastral` con valor útil y PredioObra efectivo = 1 cuenta como cambio válido.
 
 ### 4.2 PredioObra efectivo = 0
 
@@ -184,9 +228,11 @@ Archivos: misma tabla de tipos 1–9; reemplazo no destructivo de `Fotos.Ruta`.
 
 Si llega solo un archivo (p. ej. `Sapac.reciboSapac`) y no existe Sapac → se crea Sapac mínimo.
 
+`LicenciaConstruccion.ClaveCatastral` (y el resto de LC) se **ignora**; no se borra valor histórico.
+
 ### 4.3 PredioObra efectivo = 1
 
-Textos: `LicenciaConstruccion.*` + corresponsables indexados.
+Textos: `LicenciaConstruccion.*` (incluye `ClaveCatastral`) + corresponsables indexados.
 
 | Corresponsable | Comportamiento |
 |----------------|----------------|
@@ -267,7 +313,11 @@ Solo tipos **6, 7, 8** en este arreglo. Independiente de `PredioObra`. Vacío `[
 ### 5.2 Si `predioObra === 0`
 
 Objetos anidados: `Sapac`, `Catastro`, `Licencias`, `ProteccionCivil` (pueden ser `null`).  
+Dentro de `Licencias`: `Contacto` y `ContactoRepresentante` (mismo patrón de campos nulos cuando no hay fila).  
+`ProteccionCivil` **no** incluye `ContactoRepresentante`.  
 URLs embebidas: `reciboSapac`, `caratulamedidor`, `cuadromedidor`, `reciboPredial`, `licenciaFuncionamiento`, `fachada`, `estacionamiento`, `bodega`, `vistoBueno` → `string | null`.
+
+`Catastro.Clave` puede coexistir en la respuesta con `LicenciaConstruccion.ClaveCatastral` en otros registros; son campos distintos.
 
 ### 5.3 Si `predioObra === 1`
 
@@ -277,7 +327,7 @@ URLs embebidas: `reciboSapac`, `caratulamedidor`, `cuadromedidor`, `reciboPredia
 
 o un objeto con:
 
-**Escalares (datos de tabla):** `Id`, `TipoSolicitudLicencia`, …, `NumeroExpediente`, `NumeroControl`, `SeguimientoObra`, indicadores PascalCase (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, `PlanoAutorizado`, …, `Otros`), `Corresponsables[]`.
+**Escalares (datos de tabla):** `Id`, `TipoSolicitudLicencia`, …, `NumeroExpediente`, `NumeroControl`, `SeguimientoObra`, **`ClaveCatastral`** (`string | null`; no omitir si es `NULL` en BD), indicadores PascalCase (`ConstanciaAlineamiento`, `LicenciaUsoSuelo`, `PlanoAutorizado`, …, `Otros`), `Corresponsables[]`.
 
 **URLs de archivo (siempre presentes, `string | null`):**
 
@@ -323,6 +373,7 @@ Fuente: `LC_RESPONSE_PHOTO_MAP`. La ruta se toma de `FotosLicenciaConstruccion.R
       "Id": 20,
       "TipoSolicitudLicencia": 1,
       "DescripcionProyecto": "Construcción de vivienda",
+      "ClaveCatastral": "1100-01-002-003",
       "LicenciaUsoSuelo": 1,
       "PlanoAutorizado": 0,
       "Corresponsables": [],
@@ -351,7 +402,61 @@ Obsérvese la coexistencia: `LicenciaUsoSuelo: 1` (tinyint) y `licenciaUsoSuelo:
 
 ---
 
-## 6. Campos de contrato obsoletos (no usar)
+## 6. Autenticación — contratos clave
+
+### 6.1 JWT / `request.user` (`AuthenticatedUser`)
+
+```ts
+{
+  userId: number;
+  email: string;
+  idGrupo: number | null;
+  rol: number | null;
+}
+```
+
+Origen: access token (`id`, `email`, `idGrupo`, `rol`, `type: 'access'`).
+
+### 6.2 `GET /login/me`
+
+```json
+{
+  "id": 1,
+  "nombre": "...",
+  "apellidoPaterno": "...",
+  "apellidoMaterno": "...",
+  "nombreCompleto": "...",
+  "UserName": "correo@dominio",
+  "PhoneNumber": "5512345678",
+  "permisos": ["1", "2"],
+  "logo": null,
+  "nombreRol": "...",
+  "nombreGrupo": "...",
+  "ultimoLogin": "2026-07-20T18:00:00.000Z"
+}
+```
+
+---
+
+## 7. Usuarios — visibilidad GET
+
+Alcance según **rol del JWT** (no según filtros del cliente):
+
+| Rol token | List / paginado | Por grupo (`/list/grupo/:id`) | Por ID (`/:id`) |
+|-----------|-----------------|-------------------------------|-----------------|
+| 4 | Todos | Cualquier grupo | Sin filtro de alcance |
+| 3 | Todos excepto `IdRol = 4` | Cualquier grupo, excepto usuarios rol 4 | Sin filtro de alcance |
+| 2 | `IdGrupo = token` y `IdRol <> 4` | Solo si `:id` = grupo del token; si no → **403** | Sin filtro de alcance |
+| 1 | **403** | **403** | Sin filtro de alcance (JWT válido) |
+| 2 sin grupo | **403** | **403** | — |
+
+Relación real: `Usuarios.IdRol` (un rol) y `Usuarios.IdGrupo` (un grupo).
+
+Paginación: `paginated.total` = solo usuarios visibles.
+
+---
+
+## 8. Campos de contrato obsoletos (no usar)
 
 | Nombre antiguo | Sustituto |
 |----------------|-----------|
@@ -361,14 +466,15 @@ Obsérvese la coexistencia: `LicenciaUsoSuelo: 1` (tinyint) y `licenciaUsoSuelo:
 
 ---
 
-## 7. Referencia Swagger
+## 9. Referencia Swagger
 
-- POST / PATCH: esquemas en controladores (`registros.controller.ts`, `registros-actualizar.controller.ts`).
+- POST / PATCH registros: esquemas en controladores (`registros.controller.ts`, `registros-actualizar.controller.ts`), incluye `LicenciaConstruccion.ClaveCatastral`.
 - GET detalle: `RegistroDetalleResponseDto` / `RegistroDetalleLicenciaConstruccionDto` en `src/registros/dto/registro-detalle-response.dto.ts` (reutilizado por monitoreo).
+- Usuarios / roles / login: descripciones de visibilidad y respuestas 401/403 en sus controladores.
 
 ---
 
-## 8. Guías de consumo cliente
+## 10. Guías de consumo cliente
 
 - [consumo-post-registros-angular.md](./consumo-post-registros-angular.md)
 - [consumo-patch-registros-actualizar-angular.md](./consumo-patch-registros-actualizar-angular.md)

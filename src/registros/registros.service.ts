@@ -1241,27 +1241,6 @@ export class RegistrosService {
               correo: savedContacto.correo,
             };
           }
-        }
-
-        if (crearProteccionCivil) {
-          const proteccionCivil = proteccionCivilDto ?? {};
-          const savedProteccionCivil = await manager.save(
-            ProteccionCivil,
-            manager.create(ProteccionCivil, {
-              idRegistro,
-              esEmpresa: proteccionCivil.EsEmpresa ?? null,
-              razonSocial: proteccionCivil.RazonSocial ?? null,
-              rfc: proteccionCivil.RFC ?? null,
-              nombre: proteccionCivil.Nombre ?? null,
-              apellidoPaterno: proteccionCivil.ApellidoPaterno ?? null,
-              apellidoMaterno: proteccionCivil.ApellidoMaterno ?? null,
-              telefono: proteccionCivil.Telefono ?? null,
-              registroAcreditacion:
-                proteccionCivil.RegistroAcreditacion ?? null,
-              tienePrograma: proteccionCivil.TienePrograma ?? null,
-            }),
-          );
-          data.idProteccionCivil = Number(savedProteccionCivil.id);
 
           if (this.hasContactoRepresentanteData(contactoRepresentanteDto)) {
             const contactoRepresentante = contactoRepresentanteDto ?? {};
@@ -1287,6 +1266,27 @@ export class RegistrosService {
               correo: savedContactoRepresentante.correo,
             };
           }
+        }
+
+        if (crearProteccionCivil) {
+          const proteccionCivil = proteccionCivilDto ?? {};
+          const savedProteccionCivil = await manager.save(
+            ProteccionCivil,
+            manager.create(ProteccionCivil, {
+              idRegistro,
+              esEmpresa: proteccionCivil.EsEmpresa ?? null,
+              razonSocial: proteccionCivil.RazonSocial ?? null,
+              rfc: proteccionCivil.RFC ?? null,
+              nombre: proteccionCivil.Nombre ?? null,
+              apellidoPaterno: proteccionCivil.ApellidoPaterno ?? null,
+              apellidoMaterno: proteccionCivil.ApellidoMaterno ?? null,
+              telefono: proteccionCivil.Telefono ?? null,
+              registroAcreditacion:
+                proteccionCivil.RegistroAcreditacion ?? null,
+              tienePrograma: proteccionCivil.TienePrograma ?? null,
+            }),
+          );
+          data.idProteccionCivil = Number(savedProteccionCivil.id);
         }
 
         // Fotos SAPAC + Catastro + Licencias → misma tabla Fotos / mismo storage.
