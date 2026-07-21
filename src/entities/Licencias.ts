@@ -51,6 +51,9 @@ export class Licencias {
   @Column('varchar', { name: 'RFC', nullable: true, length: 16 })
   rfc: string | null;
 
+  @Column('varchar', { name: 'RazonSocial', nullable: true, length: 200 })
+  razonSocial: string | null;
+
   @Column('datetime', { name: 'FechaExpedicion', nullable: true })
   fechaExpedicion: Date | null;
 

@@ -1201,8 +1201,9 @@ describe('MonitoreoService.findOne', () => {
         nombrePropietario: null,
         apellidoPaternoPropietario: null,
         apellidoMaternoPropietario: null,
-        tipoPersona: null,
-        rfc: null,
+        tipoPersona: 2,
+        rfc: 'ABC010101XYZ',
+        razonSocial: 'Comercializadora Ejemplo, S.A. de C.V.',
         fechaExpedicion: null,
         fechaRefrendo: null,
         estacionamiento: null,
@@ -1213,7 +1214,7 @@ describe('MonitoreoService.findOne', () => {
         id: 3,
         idRegistro: 150,
         esEmpresa: 1,
-        razonSocial: null,
+        razonSocial: 'Razón social de Protección Civil',
         rfc: null,
         nombre: 'PC Nombre',
         apellidoPaterno: null,
@@ -1237,6 +1238,10 @@ describe('MonitoreoService.findOne', () => {
     const licencias = result.data.Licencias as Record<string, unknown>;
     const pc = result.data.ProteccionCivil as Record<string, unknown>;
 
+    expect(licencias.RazonSocial).toBe(
+      'Comercializadora Ejemplo, S.A. de C.V.',
+    );
+    expect(licencias.NombreComercial).toBe('Negocio');
     expect(licencias.ContactoRepresentante).toEqual(
       expect.objectContaining({
         Id: 9,
@@ -1249,6 +1254,7 @@ describe('MonitoreoService.findOne', () => {
     );
     expect(pc).not.toHaveProperty('ContactoRepresentante');
     expect(pc.Nombre).toBe('PC Nombre');
+    expect(pc.RazonSocial).toBe('Razón social de Protección Civil');
   });
 
   it('rol 4 consulta por Id sin filtro adicional', async () => {

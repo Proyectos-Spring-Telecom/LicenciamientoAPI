@@ -283,12 +283,40 @@ describe('parseRegistroActualizarMultipart', () => {
     expect(parsed.hasLicencias).toBe(true);
     expect(parsed.hasProteccionCivil).toBe(true);
   });
+
+  it('parsea Licencias.RazonSocial y cuenta como dato útil', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.RazonSocial':
+          '  Comercializadora Ejemplo, S.A. de C.V.  ',
+      },
+      0,
+    );
+    expect(parsed.hasLicencias).toBe(true);
+    expect(parsed.licencias?.RazonSocial).toBe(
+      'Comercializadora Ejemplo, S.A. de C.V.',
+    );
+  });
+
+  it('ignora Licencias.RazonSocial cuando PredioObra efectivo es 1', async () => {
+    const parsed = await parseRegistroActualizarMultipart(
+      {
+        idRegistro: '10',
+        'Licencias.RazonSocial': 'No debe guardar',
+      },
+      1,
+    );
+    expect(parsed.hasLicencias).toBe(false);
+    expect(parsed.licencias).toBeUndefined();
+  });
 });
 
 describe('RegistrosActualizarService.updateFromMultipart', () => {
   function createService(options?: {
     registro?: Registros | null;
     sapac?: Sapac | null;
+    licencias?: Licencias | null;
     licenciaConstruccion?: LicenciaConstruccion | null;
     corresponsables?: Corresponsables[];
     failOnSave?: boolean;
@@ -307,6 +335,8 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
         : options.registro;
 
     const sapac = options?.sapac === undefined ? null : options.sapac;
+    const licencias =
+      options?.licencias === undefined ? null : options.licencias;
     const lc =
       options?.licenciaConstruccion === undefined
         ? null
@@ -325,7 +355,7 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
         if (entity === Registros) return Promise.resolve(registro);
         if (entity === Sapac) return Promise.resolve(sapac);
         if (entity === Catastro) return Promise.resolve(null);
-        if (entity === Licencias) return Promise.resolve(null);
+        if (entity === Licencias) return Promise.resolve(licencias);
         if (entity === Contactos) return Promise.resolve(null);
         if (entity === ProteccionCivil) return Promise.resolve(null);
         if (entity === LicenciaConstruccion) return Promise.resolve(lc);
@@ -559,6 +589,76 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
       expect.objectContaining({ idRegistro: 10 }),
     );
     expect(manager.save).toHaveBeenCalled();
+  });
+
+  it('actualiza Licencias.RazonSocial sin borrar con vacíos', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 4,
+    } as Registros;
+    const licencias = {
+      id: 7,
+      idRegistro: 10,
+      nombreComercial: 'Comercio Anterior',
+      rfc: 'ABC010101XYZ',
+      razonSocial: 'Empresa Anterior, S.A. de C.V.',
+    } as Licencias;
+    const { service } = createService({ registro, licencias });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'Licencias.RazonSocial': 'Empresa Nueva, S.A. de C.V.',
+      'Licencias.NombreComercial': '',
+    });
+
+    expect(licencias.razonSocial).toBe('Empresa Nueva, S.A. de C.V.');
+    expect(licencias.nombreComercial).toBe('Comercio Anterior');
+    expect(licencias.rfc).toBe('ABC010101XYZ');
+  });
+
+  it('acepta PATCH solo con Licencias.RazonSocial cuando PredioObra efectivo es 0', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 4,
+    } as Registros;
+    const licencias = {
+      id: 7,
+      idRegistro: 10,
+      razonSocial: null,
+    } as Licencias;
+    const { service } = createService({ registro, licencias });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'Licencias.RazonSocial': 'Empresa Nueva, S.A. de C.V.',
+    });
+
+    expect(licencias.razonSocial).toBe('Empresa Nueva, S.A. de C.V.');
+  });
+
+  it('ignora Licencias.RazonSocial cuando PredioObra efectivo es 1 y conserva histórico', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 1,
+      estatus: 4,
+    } as Registros;
+    const licencias = {
+      id: 7,
+      idRegistro: 10,
+      razonSocial: 'Empresa Histórica, S.A. de C.V.',
+    } as Licencias;
+    const { service } = createService({ registro, licencias });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      PredioObra: '1',
+      'Licencias.RazonSocial': 'Empresa No Permitida, S.A. de C.V.',
+      'LicenciaConstruccion.DescripcionProyecto': 'Obra',
+    });
+
+    expect(licencias.razonSocial).toBe('Empresa Histórica, S.A. de C.V.');
   });
 
   it('crea LicenciaConstruccion cuando PredioObra efectivo es 1', async () => {

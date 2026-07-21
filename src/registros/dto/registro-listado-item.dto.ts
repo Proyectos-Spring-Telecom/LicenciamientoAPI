@@ -103,6 +103,14 @@ export class RegistroListadoItemDto {
   @ApiPropertyOptional({ nullable: true, example: 'TOC012026' })
   rfc: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: 200,
+    example: 'Comercializadora Ejemplo SA de CV',
+    description: 'Licencias.RazonSocial',
+  })
+  razonSocial: string | null;
+
   @ApiPropertyOptional({ nullable: true })
   fechaExpedicion: Date | null;
 

@@ -50,6 +50,7 @@ export const LICENCIAS_SCALAR_ATTRS = new Set([
   'ApellidoMaternoPropietario',
   'TipoPersona',
   'RFC',
+  'RazonSocial',
   'FechaExpedicion',
   'FechaRefrendo',
   'Estacionamiento',

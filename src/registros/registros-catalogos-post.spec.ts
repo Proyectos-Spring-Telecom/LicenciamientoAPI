@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateLicenciaConstruccionDto } from './dto/create-licencia-construccion.dto';
+import { CreateLicenciaDto } from './dto/create-licencia.dto';
 import { CreateProteccionCivilDto } from './dto/create-proteccion-civil.dto';
 
 describe('CreateProteccionCivilDto.EsEmpresa', () => {
@@ -184,4 +185,34 @@ describe('CreateLicenciaConstruccionDto nuevos campos escalares', () => {
       expect(dto.ConstanciaAlineamiento).toBe(Number(input));
     },
   );
+});
+
+describe('CreateLicenciaDto.RazonSocial', () => {
+  async function validateRazonSocial(value: unknown) {
+    const dto = plainToInstance(CreateLicenciaDto, { RazonSocial: value });
+    const errors = await validate(dto);
+    const fieldErrors = errors.filter(
+      (error) => error.property === 'RazonSocial',
+    );
+    return { dto, fieldErrors };
+  }
+
+  it('acepta razón social con puntuación y trim', async () => {
+    const { dto, fieldErrors } = await validateRazonSocial(
+      '  Comercializadora Ejemplo, S.A. de C.V.  ',
+    );
+    expect(fieldErrors).toHaveLength(0);
+    expect(dto.RazonSocial).toBe('Comercializadora Ejemplo, S.A. de C.V.');
+  });
+
+  it('rechaza longitud superior a 200', async () => {
+    const { fieldErrors } = await validateRazonSocial('x'.repeat(201));
+    expect(fieldErrors.length).toBeGreaterThan(0);
+  });
+
+  it('trata vacío como ausente', async () => {
+    const { dto, fieldErrors } = await validateRazonSocial('   ');
+    expect(fieldErrors).toHaveLength(0);
+    expect(dto.RazonSocial).toBeUndefined();
+  });
 });

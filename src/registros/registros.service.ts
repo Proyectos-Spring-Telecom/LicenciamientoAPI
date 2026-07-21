@@ -907,6 +907,7 @@ export class RegistrosService {
         licencia?.apellidoMaternoPropietario ?? null,
       tipoPersona: licencia?.tipoPersona ?? null,
       rfc: licencia?.rfc ?? null,
+      razonSocial: licencia?.razonSocial ?? null,
       fechaExpedicion: licencia?.fechaExpedicion ?? null,
       fechaRefrendo: licencia?.fechaRefrendo ?? null,
       estacionamiento: licencia?.estacionamiento ?? null,
@@ -1204,6 +1205,7 @@ export class RegistrosService {
                 licencia.ApellidoMaternoPropietario ?? null,
               tipoPersona: licencia.TipoPersona ?? null,
               rfc: licencia.RFC ?? null,
+              razonSocial: licencia.RazonSocial ?? null,
               fechaExpedicion: licencia.FechaExpedicion
                 ? new Date(licencia.FechaExpedicion)
                 : null,

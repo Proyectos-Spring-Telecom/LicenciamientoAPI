@@ -887,6 +887,7 @@ export class RegistrosActualizarService {
         apellidoMaternoPropietario: licenciaDto.ApellidoMaternoPropietario,
         tipoPersona: licenciaDto.TipoPersona,
         rfc: licenciaDto.RFC,
+        razonSocial: licenciaDto.RazonSocial,
         estacionamiento: licenciaDto.Estacionamiento,
         tipo: licenciaDto.Tipo,
       });

@@ -157,7 +157,6 @@ const FORBIDDEN_LICENCIAS = new Set([
   'FechaActualizacion',
   'IdTipoFoto',
   'Ruta',
-  'RazonSocial',
   'Estatus',
 ]);
 
