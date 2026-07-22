@@ -70,10 +70,15 @@ export class CreateUsuarioDto {
   @ApiProperty({ description: 'Rol asignado', example: 1 })
   idRol!: number;
 
-  @IsInt({ message: 'idGrupo debe ser un número entero' })
-  @ApiProperty({ description: 'Grupo asignado', example: 1 })
   @IsOptional()
-  idGrupo!: number;
+  @IsInt({ message: 'idGrupo debe ser un número entero' })
+  @ApiProperty({
+    description: 'Grupo asignado. Opcional; si se omite queda null.',
+    example: 1,
+    required: false,
+    nullable: true,
+  })
+  idGrupo?: number | null;
 
   @IsOptional()
   @IsInt({ message: 'emailConfirmed debe ser 0 o 1' })
