@@ -58,12 +58,12 @@ export class CreateUsuarioDto {
     message:
       'La contraseña debe contener al menos una letra, un número y un símbolo (@$!%*?&.)',
   })
-  @ApiProperty({ description: 'Contraseña', example: 'P@ssw0rd.' })
+  @ApiProperty({ description: 'Contraseña', example: 'C0ntr@sen@' })
   password!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'La confirmación de contraseña es obligatoria' })
-  @ApiProperty({ description: 'Confirmación de contraseña', example: 'P@ssw0rd.' })
+  @ApiProperty({ description: 'Confirmación de contraseña', example: 'C0ntr@sen@' })
   confirmPassword!: string;
 
   @IsInt({ message: 'idRol debe ser un número entero' })
