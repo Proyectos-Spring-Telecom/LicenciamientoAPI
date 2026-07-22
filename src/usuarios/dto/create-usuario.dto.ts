@@ -72,6 +72,7 @@ export class CreateUsuarioDto {
 
   @IsInt({ message: 'idGrupo debe ser un número entero' })
   @ApiProperty({ description: 'Grupo asignado', example: 1 })
+  @IsOptional()
   idGrupo!: number;
 
   @IsOptional()
