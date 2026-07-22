@@ -18,7 +18,7 @@ export class UpdateUsuarioContrasena {
   @IsNotEmpty({ message: 'El Password es obligatorio' })
   @ApiProperty({
     description: 'Contraseña actual del usuario',
-    example: 'P@ssw0rd.',
+    example: 'C0ntr@sen@',
   })
   passwordActual: string;
 
@@ -30,7 +30,7 @@ export class UpdateUsuarioContrasena {
   @ApiProperty({
     description:
       'Nueva contraseña (6-12 caracteres; 1 mayúscula, 1 minúscula, 1 número y 1 carácter especial)',
-    example: 'P@ssw0rd.',
+    example: 'C0ntr@sen@',
   })
   passwordNueva: string;
 
@@ -41,7 +41,7 @@ export class UpdateUsuarioContrasena {
   @Matches(PASSWORD_PATTERN, { message: PASSWORD_RULES_MESSAGE })
   @ApiProperty({
     description: 'Confirmación de la nueva contraseña (mismas reglas)',
-    example: 'P@ssw0rd.',
+    example: 'C0ntr@sen@',
   })
   passwordNuevaConfirmacion: string;
 }
