@@ -46,7 +46,7 @@ export class UsuariosController {
   @ApiOperation({
     summary: 'Crear un nuevo usuario',
     description:
-      'Registra un usuario con nombre, apellidos, teléfono, correo, contraseña, rol y grupo.',
+      'Registra un usuario con nombre, apellidos, teléfono, correo, contraseña y rol. El grupo (idGrupo) es opcional.',
   })
   @ApiBody({
     type: CreateUsuarioDto,
@@ -62,7 +62,6 @@ export class UsuariosController {
           password: 'P@ssw0rd.',
           confirmPassword: 'P@ssw0rd.',
           idRol: 1,
-          idGrupo: 1,
           emailConfirmed: 1,
           estatus: 1,
         },
@@ -253,12 +252,13 @@ export class UsuariosController {
   @Patch('actualizar/contrasena/:id')
   @ApiOperation({
     summary: 'Cambiar contraseña de usuario',
-    description: 'Actualiza la contraseña de un usuario específico'
+    description:
+      'Actualiza la contraseña del usuario autenticado. El `:id` del path debe coincidir con el ID del token JWT.',
   })
   @ApiParam({
     name: 'id',
     type: 'number',
-    description: 'ID del usuario',
+    description: 'ID del usuario (debe ser el mismo del usuario autenticado)',
     example: 1
   })
   @ApiBody({ type: UpdateUsuarioContrasena })
@@ -268,7 +268,13 @@ export class UsuariosController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Contraseña inválida'
+    description:
+      'Contraseña inválida (debe tener 6-12 caracteres, 1 mayúscula, 1 minúscula, 1 número y 1 carácter especial)',
+  })
+  @ApiResponse({
+    status: 403,
+    description:
+      'El ID del path no coincide con el usuario autenticado',
   })
   @ApiResponse({
     status: 404,

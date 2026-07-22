@@ -350,7 +350,7 @@ ORDER BY u.Id DESC`,
         userName: createUsuarioDto.correo,
         passwordHash: hashedPassword,
         idRol: createUsuarioDto.idRol,
-        idGrupo: createUsuarioDto.idGrupo,
+        idGrupo: createUsuarioDto.idGrupo ?? null,
         emailConfirmed: createUsuarioDto.emailConfirmed ?? 1,
         estatus: createUsuarioDto.estatus ?? 1,
       });
@@ -364,7 +364,7 @@ ORDER BY u.Id DESC`,
         phoneNumber: createUsuarioDto.telefono,
         correo: createUsuarioDto.correo,
         idRol: createUsuarioDto.idRol,
-        idGrupo: createUsuarioDto.idGrupo,
+        idGrupo: createUsuarioDto.idGrupo ?? null,
         emailConfirmed: createUsuarioDto.emailConfirmed ?? 1,
         estatus: createUsuarioDto.estatus ?? 1,
       };
@@ -414,10 +414,16 @@ ORDER BY u.Id DESC`,
 
   async updateContrasena(
     id: number,
-    idUser: string,
+    idUser: string | number,
     updateUsuarioContrasena: UpdateUsuarioContrasena,
   ) {
     try {
+      if (Number(id) !== Number(idUser)) {
+        throw new ForbiddenException(
+          'Solo puede cambiar la contraseña de su propia cuenta.',
+        );
+      }
+
       const usuario = await this.usuarioRepository.findOne({
         where: { id },
       });
