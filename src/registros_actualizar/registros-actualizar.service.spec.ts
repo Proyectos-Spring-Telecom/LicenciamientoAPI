@@ -559,6 +559,114 @@ describe('RegistrosActualizarService.updateFromMultipart', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('establece Estatus=4 al actualizar datos generales (desde 1)', async () => {
+    const registro = {
+      id: 10,
+      calle: 'Anterior',
+      predioObra: 0,
+      estatus: 1,
+    } as Registros;
+    const { service } = createService({ registro });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Nueva Calle',
+    });
+
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('establece Estatus=4 al actualizar Licencias.RazonSocial (desde 2)', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 2,
+    } as Registros;
+    const { service } = createService({
+      registro,
+      licencias: { id: 5, idRegistro: 10, razonSocial: 'Vieja' } as Licencias,
+    });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      'Licencias.RazonSocial': 'Nueva SA',
+    });
+
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('establece Estatus=4 al actualizar fotografías', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 3,
+    } as Registros;
+    const { service } = createService({ registro });
+
+    await service.updateFromMultipart(
+      { idRegistro: '10' },
+      {
+        [SAPAC_FILE_FIELD_NAMES.reciboSapac]: [
+          fakePng(SAPAC_FILE_FIELD_NAMES.reciboSapac),
+        ],
+      },
+    );
+
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('fuerza Estatus=4 aunque el valor previo sea distinto de 4', async () => {
+    const registro = {
+      id: 10,
+      calle: 'X',
+      predioObra: 0,
+      estatus: 5,
+    } as Registros;
+    const { service } = createService({ registro });
+
+    await service.updateFromMultipart({
+      idRegistro: '10',
+      Calle: 'Y',
+    });
+
+    expect(registro.estatus).toBe(4);
+  });
+
+  it('no cambia Estatus si la solicitud no tiene datos válidos', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 2,
+    } as Registros;
+    const { service } = createService({ registro });
+
+    await expect(
+      service.updateFromMultipart({ idRegistro: '10' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(registro.estatus).toBe(2);
+  });
+
+  it('no persiste Estatus=4 si la transacción falla', async () => {
+    const registro = {
+      id: 10,
+      predioObra: 0,
+      estatus: 1,
+      calle: 'Original',
+    } as Registros;
+    const { service, dataSource } = createService({
+      registro,
+      failOnSave: true,
+    });
+
+    await expect(
+      service.updateFromMultipart({
+        idRegistro: '10',
+        Calle: 'Nueva',
+      }),
+    ).rejects.toThrow('db fail');
+    expect(dataSource.transaction).toHaveBeenCalled();
+  });
+
   it('400 con solo LC vacía', async () => {
     const registro = {
       id: 10,

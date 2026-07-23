@@ -238,9 +238,8 @@ export class RegistrosActualizarService {
           );
         }
 
-        const estatusOriginal = registro.estatus;
         this.applyRegistroRoot(registro, parsed.registro);
-        registro.estatus = estatusOriginal;
+        registro.estatus = 4;
         await manager.save(Registros, registro);
 
         const predioFinal: 0 | 1 =
