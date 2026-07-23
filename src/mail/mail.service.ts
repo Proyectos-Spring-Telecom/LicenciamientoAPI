@@ -205,4 +205,162 @@ export class MailService {
     `,
         });
     }
+
+    /**
+     * Envía el código de recuperación en el cuerpo del correo (HTML + texto plano).
+     * No incluir el código en el asunto.
+     */
+    async sendRecoveryAccessCodeEmail(params: {
+        to: string;
+        code: string;
+        expirationMinutes: number;
+        displayName?: string | null;
+    }): Promise<void> {
+        const safeCode = this.escapeHtml(params.code);
+        const safeMinutes = Number(params.expirationMinutes);
+        const rawName =
+            params.displayName != null ? String(params.displayName).trim() : '';
+        const greeting = rawName
+            ? `Hola, ${this.escapeHtml(rawName)}:`
+            : 'Hola:';
+
+        const html = this.buildRecoveryAccessCodeHtml({
+            greeting,
+            code: safeCode,
+            expirationMinutes: safeMinutes,
+        });
+        const text = this.buildRecoveryAccessCodeText({
+            displayName: rawName || null,
+            code: params.code,
+            expirationMinutes: safeMinutes,
+        });
+
+        await this.transporter.sendMail({
+            from: `<${process.env.E_MAIL}>`,
+            to: params.to,
+            subject: 'Código de recuperación de acceso',
+            text,
+            html,
+        });
+    }
+
+    private escapeHtml(value: string): string {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    private buildRecoveryAccessCodeHtml(params: {
+        greeting: string;
+        code: string;
+        expirationMinutes: number;
+    }): string {
+        return `<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Código de recuperación</title>
+</head>
+<body style="font-family: 'Open Sans', sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td align="center">
+                <table width="550px" style="background-color: #FFFFFF; border-radius: 13px; box-shadow: rgba(100, 100, 111, 0.2) 0px 7px 29px 0px;" cellpadding="0" cellspacing="0">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background-color: #021d6a; color: #FFFFFF; padding: 1rem;">
+                            <a href="#">
+                                <img src="https://analiticadevideo.s3.us-east-1.amazonaws.com/Imagenes/spring_white.png" alt="logo" style="height: 95px;">
+                            </a>
+                        </td>
+                    </tr>
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 0 2rem;" align="center">
+                            <h5 style="color: #691330; font-size: 30px; text-align:center;">
+                                Recuperación de acceso
+                            </h5>
+                            <p style="color: #000; font-family: 'Open Sans', sans-serif; font-size: 16px; text-align: center; margin-top: -30px;">
+                                ${params.greeting}
+                            </p>
+                            <p style="color: #000; font-family: 'Open Sans', sans-serif; font-size: 16px; text-align: center;">
+                                Recibimos una solicitud para recuperar el acceso a tu cuenta. Tu código de autenticación es:
+                            </p>
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin: 18px 0;">
+                                <tr>
+                                    <td style="background-color:#691330; color:#ffffff; font-size:28px; font-weight:bold; padding:18px 25px; border-radius:10px; letter-spacing:8px; font-family:monospace;">
+                                        ${params.code}
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="color: #000; font-family: 'Open Sans', sans-serif; font-size: 15px; text-align: center; margin: 0 0 10px 0;">
+                                Este código expira en ${params.expirationMinutes} minutos.
+                            </p>
+                            <p style="color: #000; font-family: 'Open Sans', sans-serif; font-size: 16px; text-align: center;">
+                                Si no has solicitado esta recuperación, <strong>ignora este correo</strong>.
+                            </p>
+                        </td>
+                    </tr>
+                    <!-- Divider -->
+                    <tr>
+                        <td style="padding: 0 2rem;">
+                            <hr style="border: none; height: 2px; background-color: rgba(226, 226, 226, 0.589); margin-top: 25px;">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 0 2rem;"><br>
+                            <p style="margin: 0; font-size: 16px; font-family: 'Open Sans', sans-serif;"><strong>Nota: </strong>Recibes este correo electrónico porque has solicitado recuperar el acceso. Si no estás seguro/a de por qué estás recibiendo esto, ignóralo.</p>
+                            <p>Atentamente,</p>
+                            <p style="margin-top: -10px;"><strong>Spring Telecom</strong></p>
+                            <br>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #021d6a; color: #FFFFFF; padding: 2rem;" align="center">
+                            <h5 style="color: #FFFFFF; margin: 0; font-family: 'Open Sans', sans-serif; font-size: 13px;"><b>Tu entorno unificado para la gestión y análisis.</b></h5><br>
+                            <p style="margin: 0; font-size: 13px; font-family: 'Open Sans', sans-serif;">Si necesita ayuda o tiene
+                                preguntas, siempre nos complace poder ayudarle. Comuníquese con nosotros enviándonos un correo
+                                electrónico a contacto@springtelecom.mx</p>
+                            <p style="margin: 0; font-size: 13px; font-family: 'Open Sans', sans-serif;">Atentamente,</p>
+                            <p style="margin: 0; font-size: 13px; font-family: 'Open Sans', sans-serif;">© Spring Telecom</p>
+                            <br>
+                            <p style="margin: 0; font-size: 9px; font-family: 'Open Sans', sans-serif;">Spring Telecom, C. San Cristóbal 103 piso 2, San Cristóbal, 62250 Cuernavaca, Morelos.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
+    }
+
+    private buildRecoveryAccessCodeText(params: {
+        displayName: string | null;
+        code: string;
+        expirationMinutes: number;
+    }): string {
+        const greeting = params.displayName
+            ? `Hola, ${params.displayName}:`
+            : 'Hola:';
+
+        return [
+            'Recuperación de acceso',
+            '',
+            greeting,
+            '',
+            'Recibimos una solicitud para recuperar el acceso a tu cuenta.',
+            '',
+            `Tu código de autenticación es: ${params.code}`,
+            '',
+            `Este código expira en ${params.expirationMinutes} minutos.`,
+            '',
+            'Si no solicitaste esta recuperación, ignora este mensaje.',
+        ].join('\n');
+    }
 }

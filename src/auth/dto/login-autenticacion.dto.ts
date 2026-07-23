@@ -6,8 +6,8 @@ export class CodigoPasajeroAutenticacion{
     @IsString()
     @IsNotEmpty()
     @ApiProperty({
-                description: 'Usuario',
-                example: 'ejemplo@ejemplo.com',
+                description: 'Código de autenticación enviado al correo',
+                example: '4821',
             })
     codigo:string;
 }

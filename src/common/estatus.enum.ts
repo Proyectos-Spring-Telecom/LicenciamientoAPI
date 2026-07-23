@@ -1,6 +1,8 @@
 export enum EstatusEnum {
-  ACTIVO = 1, //activo o no usado
-  INACTIVO = 0, //inactivo usado
+  /** Para `CodigoAutenticacion.Usado`: código ya utilizado. */
+  ACTIVO = 1,
+  /** Para `CodigoAutenticacion.Usado`: código aún no utilizado. */
+  INACTIVO = 0,
 }
 
 export enum TipoCodigoAutenticacion {

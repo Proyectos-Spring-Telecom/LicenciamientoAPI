@@ -3,6 +3,7 @@ import {
   HttpException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import { LoginAuthDto } from './dto/login-auth.dto';
 import { MailService } from 'src/mail/mail.service';
 import { LoginAuthConfirmacionDto } from './dto/login-confirmacion.dto';
 import { LoginAuthResetDto } from './dto/login-recuperacion.dto';
+import { CambiarPasswordRecuperacionDto } from './dto/cambiar-password-recuperacion.dto';
 import { BitacoraLoggerService } from 'src/bitacora/bitacora.service';
 import { EstatusEnumBitcora } from 'src/common/ApiResponse';
 import { CodigoAutenticacion } from 'src/entities/CodigoAutenticacion';
@@ -24,8 +26,16 @@ import { RefreshSessions } from 'src/entities/RefreshSessions';
 import { AuthTokensService } from './auth-tokens.service';
 import { RefreshTokenPayload } from './interfaces/jwt-payload.interface';
 
+/** Vigencia del código en `generarCodigo` (15 minutos). */
+export const RECOVERY_CODE_EXPIRATION_MINUTES = 15;
+
+const RECOVERY_CODE_PUBLIC_MESSAGE =
+  'Si la cuenta existe y tiene un correo asociado, se enviará un código de recuperación.';
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
@@ -240,8 +250,8 @@ export class AuthService {
       const codigoValido = await this.codigoAutenticacioRepository.findOne({
         where: {
           codigo: codigoPasajeroAutenticacion.codigo,
-          tipo: TipoCodigoAutenticacion.CONFIRMACION_CORREO,
-          usado: EstatusEnum.ACTIVO,
+          tipo: TipoCodigoAutenticacion.RECUPERACION_CONTRASENA,
+          usado: EstatusEnum.INACTIVO,
         },
       });
 
@@ -268,33 +278,40 @@ export class AuthService {
         throw new BadRequestException('El código ha expirado');
       }
 
-      await this.usuariosRepository.update(user.id, { emailConfirmed: 1 });
+      await this.codigoAutenticacioRepository.update(codigoValido.id, {
+        usado: EstatusEnum.ACTIVO,
+        estatus: EstatusEnum.INACTIVO,
+        fechaUso: fechaActual,
+      });
 
-      const querylogger = { id: user.id, EmailConfirmado: 1 };
+      const payload = {
+        id: user.id,
+        email: user.userName,
+        type: 'access' as const,
+      };
+
+      const token = this.jwtService.sign(payload, {
+        expiresIn: `${process.env.JWT_CONFIRMACION}`,
+      });
+
+      const querylogger = { id: user.id };
       await this.bitacoraLogger.logToBitacora(
         'Usuarios',
-        `Se verifico un usuarios con nombre: ${user.nombre}`,
-        'CREATE',
+        `Se verificó el código de recuperación del usuario: ${user.nombre}`,
+        'UPDATE',
         querylogger,
         Number(user.id),
         2,
         EstatusEnumBitcora.SUCCESS,
       );
 
-      await this.codigoAutenticacioRepository.update(codigoValido.id, {
-        usado: EstatusEnum.INACTIVO,
-        estatus: EstatusEnum.INACTIVO,
-        fechaUso: fechaActual,
-      });
-
-      return `La verificación del usuario ${user.nombre} se ha completado con éxito.
-Muchas gracias por su preferencia.`;
+      return { token };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException({
-        message: 'Ocurrió un error al registrar pasajero.',
+        message: 'Ocurrió un error al verificar el código de autenticación.',
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -348,12 +365,87 @@ Muchas gracias por su preferencia.`;
     }
   }
 
+  /**
+   * Flujo adicional: genera el código con la lógica actual, lo guarda y lo
+   * envía en el cuerpo del correo. No modifica `recuperarContrasena`.
+   * La respuesta no incluye el código.
+   */
+  async recuperarAccesoConCodigoPorCorreo(
+    loginAuthConfirmacionDto: LoginAuthConfirmacionDto,
+  ): Promise<{ status: string; message: string; data: null }> {
+    const userName = String(loginAuthConfirmacionDto.userName ?? '').trim();
+    const safeResponse = {
+      status: 'success',
+      message: RECOVERY_CODE_PUBLIC_MESSAGE,
+      data: null,
+    };
+
+    try {
+      if (!userName) {
+        return safeResponse;
+      }
+
+      const user = await this.usuariosRepository.findOne({
+        where: { userName, estatus: 1 },
+      });
+
+      if (!user) {
+        return safeResponse;
+      }
+
+      const emailDestino = this.resolveUsuarioEmail(user);
+      if (!emailDestino) {
+        this.logger.warn(
+          `Solicitud de recuperación por código sin correo útil (usuarioId=${user.id}).`,
+        );
+        return safeResponse;
+      }
+
+      const codigo = await this.generarCodigo(
+        user.id,
+        TipoCodigoAutenticacion.RECUPERACION_CONTRASENA,
+      );
+
+      try {
+        await this.emailService.sendRecoveryAccessCodeEmail({
+          to: emailDestino,
+          code: codigo,
+          expirationMinutes: RECOVERY_CODE_EXPIRATION_MINUTES,
+          displayName: this.buildUsuarioDisplayName(user),
+        });
+      } catch (mailError) {
+        await this.invalidateUsuarioCodigo(user.id);
+        this.logger.error(
+          `Error al enviar correo de recuperación (usuarioId=${user.id}).`,
+          mailError instanceof Error ? mailError.stack : String(mailError),
+        );
+        throw new InternalServerErrorException(
+          'No fue posible enviar el código de recuperación. Intente de nuevo más tarde.',
+        );
+      }
+
+      this.logger.log(
+        `Correo de recuperación por código enviado (usuarioId=${user.id}).`,
+      );
+
+      return safeResponse;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException({
+        message: 'Ocurrió un error al recuperar acceso del usuario.',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async generarCodigo(idUsuario: number, tipo: number): Promise<string> {
     const codigo = Math.floor(1000 + Math.random() * 9000).toString();
 
     const ahora = new Date();
     const desfaseMs = -6 * 60 * 60 * 1000;
-    const expiracionMs = 15 * 60 * 1000;
+    const expiracionMs = RECOVERY_CODE_EXPIRATION_MINUTES * 60 * 1000;
     const expiracion = new Date(ahora.getTime() + expiracionMs + desfaseMs);
 
     const codigoExiste = await this.codigoAutenticacioRepository.findOne({
@@ -363,9 +455,10 @@ Muchas gracias por su preferencia.`;
     if (codigoExiste) {
       await this.codigoAutenticacioRepository.update(codigoExiste.id, {
         codigo,
+        tipo,
         fechaCreacion: ahora,
         fechaExpiracion: expiracion,
-        usado: EstatusEnum.ACTIVO,
+        usado: EstatusEnum.INACTIVO,
         estatus: EstatusEnum.ACTIVO,
         fechaUso: null,
       });
@@ -375,13 +468,39 @@ Muchas gracias por su preferencia.`;
         codigo,
         tipo,
         fechaExpiracion: expiracion,
-        usado: EstatusEnum.ACTIVO,
+        usado: EstatusEnum.INACTIVO,
         estatus: EstatusEnum.ACTIVO,
       });
       await this.codigoAutenticacioRepository.save(codigoCreate);
     }
 
     return codigo;
+  }
+
+  /**
+   * Destinatario = UserName almacenado (no hay columna Email separada).
+   * No aceptar correo enviado por el cliente.
+   */
+  private resolveUsuarioEmail(user: Usuarios): string | null {
+    const email = user.userName != null ? String(user.userName).trim() : '';
+    return email.length > 0 ? email : null;
+  }
+
+  private buildUsuarioDisplayName(user: Usuarios): string | null {
+    const partes = [user.nombre, user.apellidoPaterno, user.apellidoMaterno]
+      .map((part) => (part != null ? String(part).trim() : ''))
+      .filter((part) => part.length > 0);
+    return partes.length > 0 ? partes.join(' ') : null;
+  }
+
+  private async invalidateUsuarioCodigo(idUsuario: number): Promise<void> {
+    await this.codigoAutenticacioRepository.update(
+      { idUsuario },
+      {
+        usado: EstatusEnum.ACTIVO,
+        estatus: EstatusEnum.INACTIVO,
+      },
+    );
   }
 
   async recuperarConfirmacion(
@@ -460,6 +579,70 @@ Muchas gracias por su preferencia.`;
       }
       throw new InternalServerErrorException({
         message: 'Ocurrió un error al actualizar contraseña del usuario.',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Restablece la contraseña del usuario autenticado vía JWT de recuperación.
+   * Independiente de `resetPassword` (no usa userName del body).
+   */
+  async cambiarPasswordPorToken(
+    userId: number,
+    dto: CambiarPasswordRecuperacionDto,
+  ): Promise<{ status: string; message: string }> {
+    try {
+      if (dto.passwordNueva !== dto.passwordConfirmacion) {
+        throw new BadRequestException(
+          'passwordNueva y passwordConfirmacion no coinciden',
+        );
+      }
+
+      if (
+        userId === undefined ||
+        userId === null ||
+        !Number.isInteger(Number(userId)) ||
+        Number(userId) < 1
+      ) {
+        throw new UnauthorizedException('Token de acceso inválido');
+      }
+
+      const idUsuario = Number(userId);
+      const user = await this.usuariosRepository.findOne({
+        where: { id: idUsuario, estatus: 1 },
+      });
+      if (!user) {
+        throw new BadRequestException('Usuario no encontrado');
+      }
+
+      const hashedPassword = await bcrypt.hash(dto.passwordNueva, 10);
+      await this.usuariosRepository.update(user.id, {
+        passwordHash: hashedPassword,
+      });
+
+      await this.revokeAllRefreshSessionsForUser(user.id);
+
+      await this.bitacoraLogger.logToBitacora(
+        'Usuarios',
+        `Se restableció la contraseña por recuperación del usuario con ID: ${user.id}`,
+        'UPDATE',
+        { id: user.id },
+        Number(user.id),
+        2,
+        EstatusEnumBitcora.SUCCESS,
+      );
+
+      return {
+        status: 'success',
+        message: 'La contraseña ha sido actualizada exitosamente.',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException({
+        message: 'Ocurrió un error al restablecer la contraseña del usuario.',
         error: error instanceof Error ? error.message : String(error),
       });
     }
