@@ -1,12 +1,22 @@
-import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/guard/roles.guard';
@@ -32,7 +42,12 @@ export class DashboardController {
   @ApiOperation({
     summary: 'Obtener indicadores generales del dashboard',
     description: `
-Cuenta todos los registros de la tabla \`Registros\` con \`FechaCreacion <= NOW()\`.
+Cuenta registros de la tabla \`Registros\` con \`FechaCreacion <= NOW()\`.
+
+Visibilidad según JWT:
+- Roles 4 y 3: todos los registros.
+- Rol 2: únicamente registros asociados a su \`IdGrupo\` vía \`CapturistaVisita\`.
+- Rol 1 u otros: sin acceso.
 
 Devuelve un objeto \`card\` con:
 - \`totalRegistros\`: todos los registros del rango (cualquier estatus).
@@ -60,10 +75,19 @@ La captura por periodo se consulta en \`POST /dashboard/captura-periodo\`.
       'Conteos globales, estadística mensual, estado actual y registros por capturista.',
     type: DashboardResponseDto,
   })
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'El rol autenticado no tiene permisos o el rol 2 no tiene un grupo válido.',
+  })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 403, description: 'Acceso denegado' })
-  getCard(): Promise<DashboardResponseDto> {
-    return this.dashboardService.getCard();
+  getCard(
+    @Request() req: { user: AuthenticatedUser },
+  ): Promise<DashboardResponseDto> {
+    return this.dashboardService.getCard(req.user);
   }
 
   @Post('captura-periodo')
@@ -77,6 +101,11 @@ Devuelve el total general de registros por día y el desglose diario por estatus
 
 Las fechas \`fechaInicial\` y \`fechaFinal\` son inclusivas (\`YYYY-MM-DD\`).
 Opcionalmente acepta \`idGrupo\` e \`idCapturista\` sobre la visita vigente.
+
+Visibilidad según JWT:
+- Roles 4 y 3: todos los registros (pueden filtrar por cualquier \`idGrupo\`).
+- Rol 2: únicamente su \`IdGrupo\` del token; un \`idGrupo\` distinto → 403.
+- Rol 1 u otros: sin acceso.
 `,
   })
   @ApiBody({ type: CapturaPeriodoRequestDto })
@@ -88,11 +117,19 @@ Opcionalmente acepta \`idGrupo\` e \`idCapturista\` sobre la visita vigente.
     status: 400,
     description: 'Fechas inválidas o fecha inicial posterior a la fecha final',
   })
+  @ApiUnauthorizedResponse({
+    description: 'Token ausente, inválido o vencido.',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'El rol autenticado no tiene permisos, el rol 2 no tiene grupo válido, o intenta consultar otro grupo.',
+  })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 403, description: 'Acceso denegado' })
   obtenerCapturaPeriodo(
     @Body() dto: CapturaPeriodoRequestDto,
+    @Request() req: { user: AuthenticatedUser },
   ): Promise<CapturaPeriodoResponseDto> {
-    return this.capturaPeriodoService.obtenerCapturaPeriodo(dto);
+    return this.capturaPeriodoService.obtenerCapturaPeriodo(dto, req.user);
   }
 }

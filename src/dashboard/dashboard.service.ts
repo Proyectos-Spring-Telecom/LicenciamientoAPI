@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
+import {
+  buildDashboardGroupExistsSql,
+  DashboardScope,
+  resolveDashboardScope,
+} from './dashboard-scope';
 import { DashboardEstadisticaOperativaDto } from './dto/dashboard-estadistica-operativa.dto';
 import { DashboardRegistroCapturistaDto } from './dto/dashboard-registro-capturista.dto';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
@@ -55,8 +61,11 @@ export class DashboardService {
   /**
    * Conteos globales, estadística mensual, estado diario
    * y registros agrupados por capturista (visita vigente).
+   * Alcance: roles 4/3 todos; rol 2 solo su IdGrupo del JWT.
    */
-  async getCard(): Promise<DashboardResponseDto> {
+  async getCard(authUser: AuthenticatedUser): Promise<DashboardResponseDto> {
+    const scope = resolveDashboardScope(authUser);
+
     try {
       const [
         cardRows,
@@ -64,16 +73,22 @@ export class DashboardService {
         estadoActualRows,
         registrosCapturistasRows,
       ] = await Promise.all([
-        this.dataSource.query(this.getCardQuery()) as Promise<CardRawRow[]>,
-        this.dataSource.query(this.getEstadisticaOperativaQuery()) as Promise<
-          MonthlyRawRow[]
-        >,
-        this.dataSource.query(this.getEstadoActualQuery()) as Promise<
-          CurrentDayRawRow[]
-        >,
-        this.dataSource.query(this.getRegistrosCapturistasQuery()) as Promise<
-          DashboardRegistroCapturistaRaw[]
-        >,
+        this.dataSource.query(
+          this.getCardQuery(scope),
+          this.scopeParams(scope),
+        ) as Promise<CardRawRow[]>,
+        this.dataSource.query(
+          this.getEstadisticaOperativaQuery(scope),
+          this.scopeParams(scope),
+        ) as Promise<MonthlyRawRow[]>,
+        this.dataSource.query(
+          this.getEstadoActualQuery(scope),
+          this.scopeParams(scope),
+        ) as Promise<CurrentDayRawRow[]>,
+        this.dataSource.query(
+          this.getRegistrosCapturistasQuery(scope),
+          this.scopeParams(scope),
+        ) as Promise<DashboardRegistroCapturistaRaw[]>,
       ]);
 
       return {
@@ -93,6 +108,21 @@ export class DashboardService {
       );
       throw error;
     }
+  }
+
+  private scopeParams(scope: DashboardScope): number[] {
+    return scope.canViewAll || scope.idGrupo == null ? [] : [scope.idGrupo];
+  }
+
+  private groupScopeAnd(
+    scope: DashboardScope,
+    registroIdExpression: string,
+  ): string {
+    if (scope.canViewAll) {
+      return '';
+    }
+
+    return `AND ${buildDashboardGroupExistsSql(registroIdExpression)}`;
   }
 
   private mapCard(row?: CardRawRow) {
@@ -181,7 +211,7 @@ export class DashboardService {
     });
   }
 
-  private getCardQuery(): string {
+  private getCardQuery(scope: DashboardScope): string {
     return `
       SELECT
         COUNT(*) AS totalRegistros,
@@ -197,10 +227,11 @@ export class DashboardService {
           AS baja
       FROM Registros
       WHERE FechaCreacion <= NOW()
+        ${this.groupScopeAnd(scope, 'Registros.Id')}
     `;
   }
 
-  private getEstadisticaOperativaQuery(): string {
+  private getEstadisticaOperativaQuery(scope: DashboardScope): string {
     return `
       SELECT
         MONTH(FechaCreacion) AS numeroMes,
@@ -218,12 +249,13 @@ export class DashboardService {
       FROM Registros
       WHERE FechaCreacion >= MAKEDATE(YEAR(CURDATE()), 1)
         AND FechaCreacion < MAKEDATE(YEAR(CURDATE()) + 1, 1)
+        ${this.groupScopeAnd(scope, 'Registros.Id')}
       GROUP BY MONTH(FechaCreacion)
       ORDER BY MONTH(FechaCreacion) ASC
     `;
   }
 
-  private getEstadoActualQuery(): string {
+  private getEstadoActualQuery(scope: DashboardScope): string {
     return `
       SELECT
         DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS fecha,
@@ -241,10 +273,11 @@ export class DashboardService {
       FROM Registros
       WHERE FechaCreacion >= CURDATE()
         AND FechaCreacion < CURDATE() + INTERVAL 1 DAY
+        ${this.groupScopeAnd(scope, 'Registros.Id')}
     `;
   }
 
-  private getRegistrosCapturistasQuery(): string {
+  private getRegistrosCapturistasQuery(scope: DashboardScope): string {
     return `
       SELECT
         cv.IdCapturista AS idCapturista,
@@ -278,6 +311,7 @@ export class DashboardService {
         ON g.Id = cv.IdGrupo
       WHERE r.FechaCreacion <= NOW()
         AND cv.IdCapturista IS NOT NULL
+        ${this.groupScopeAnd(scope, 'r.Id')}
       GROUP BY
         cv.IdCapturista,
         u.Nombre,

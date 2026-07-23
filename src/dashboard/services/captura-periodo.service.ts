@@ -1,5 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
+import {
+  assertCapturaPeriodoGrupoFilter,
+  buildDashboardGroupExistsSql,
+  resolveDashboardScope,
+} from '../dashboard-scope';
 import { CapturaPeriodoItemDto } from '../dto/captura-periodo-item.dto';
 import { CapturaPeriodoRequestDto } from '../dto/captura-periodo-request.dto';
 import { CapturaPeriodoResponseDto } from '../dto/captura-periodo-response.dto';
@@ -17,6 +23,7 @@ type CapturaPeriodoRawRow = {
 /**
  * Totales diarios de captura dentro de un periodo.
  * Encapsula filtros, visita vigente y agregación por día/estatus.
+ * Alcance JWT: roles 4/3 todos; rol 2 solo su IdGrupo.
  */
 @Injectable()
 export class CapturaPeriodoService {
@@ -28,7 +35,9 @@ export class CapturaPeriodoService {
    */
   async obtenerCapturaPeriodo(
     dto: CapturaPeriodoRequestDto,
+    authUser: AuthenticatedUser,
   ): Promise<CapturaPeriodoResponseDto> {
+    const scope = resolveDashboardScope(authUser);
     const { fechaInicial, fechaFinal, idGrupo, idCapturista } = dto;
 
     if (fechaFinal < fechaInicial) {
@@ -37,12 +46,23 @@ export class CapturaPeriodoService {
       );
     }
 
-    const filtraVisita = idGrupo !== undefined || idCapturista !== undefined;
+    assertCapturaPeriodoGrupoFilter(scope, idGrupo);
+
+    const filtraVisita =
+      idGrupo !== undefined || idCapturista !== undefined;
+    const requiereScopeGrupo = !scope.canViewAll;
+
     const condiciones = [
       'r.FechaCreacion >= ?',
       'r.FechaCreacion < DATE_ADD(?, INTERVAL 1 DAY)',
     ];
     const parametros: Array<string | number> = [fechaInicial, fechaFinal];
+
+    // Alcance JWT (rol 2): EXISTS evita duplicar filas en agregaciones.
+    if (requiereScopeGrupo && scope.idGrupo != null) {
+      condiciones.push(buildDashboardGroupExistsSql('r.Id'));
+      parametros.push(scope.idGrupo);
+    }
 
     if (idGrupo !== undefined) {
       condiciones.push('cv.IdGrupo = ?');
