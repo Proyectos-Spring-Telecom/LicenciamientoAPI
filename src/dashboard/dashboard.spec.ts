@@ -1,15 +1,58 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { RequestMethod } from '@nestjs/common';
+import { ForbiddenException, RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { DataSource } from 'typeorm';
+import { AuthenticatedUser } from 'src/auth/interfaces/authenticated-user.interface';
 import { DashboardController } from './dashboard.controller';
 import { DashboardService } from './dashboard.service';
 import { CapturaPeriodoRequestDto } from './dto/captura-periodo-request.dto';
 import { CapturaPeriodoResponseDto } from './dto/captura-periodo-response.dto';
 import { DashboardResponseDto } from './dto/dashboard-response.dto';
 import { CapturaPeriodoService } from './services/captura-periodo.service';
+
+const userRol4: AuthenticatedUser = {
+  userId: 1,
+  email: 'admin@test.com',
+  idGrupo: null,
+  rol: 4,
+};
+
+const userRol3: AuthenticatedUser = {
+  userId: 2,
+  email: 'admin3@test.com',
+  idGrupo: null,
+  rol: 3,
+};
+
+const userRol2Grupo1: AuthenticatedUser = {
+  userId: 3,
+  email: 'sup1@test.com',
+  idGrupo: 1,
+  rol: 2,
+};
+
+const userRol2SinGrupo: AuthenticatedUser = {
+  userId: 4,
+  email: 'sup-sin@test.com',
+  idGrupo: null,
+  rol: 2,
+};
+
+const userRol1: AuthenticatedUser = {
+  userId: 5,
+  email: 'cap@test.com',
+  idGrupo: 1,
+  rol: 1,
+};
+
+const userRolInvalido: AuthenticatedUser = {
+  userId: 6,
+  email: 'x@test.com',
+  idGrupo: 1,
+  rol: 99,
+};
 
 describe('DashboardService.getCard', () => {
   function createService(
@@ -82,11 +125,12 @@ describe('DashboardService.getCard', () => {
       ],
     );
 
-    const result = await service.getCard();
+    const result = await service.getCard(userRol4);
 
     expect(query).toHaveBeenCalledTimes(4);
     expect(query.mock.calls[0][0]).toContain('FROM Registros');
     expect(query.mock.calls[0][0]).toContain('FechaCreacion <= NOW()');
+    expect(query.mock.calls[0][0]).not.toContain('cv_scope');
     expect(query.mock.calls[1][0]).toContain('GROUP BY MONTH(FechaCreacion)');
     expect(query.mock.calls[2][0]).toContain('DATE_FORMAT(CURDATE(),');
     expect(query.mock.calls[3][0]).toContain('FROM CapturistaVisita visita');
@@ -124,6 +168,71 @@ describe('DashboardService.getCard', () => {
     expect(result.estadisticaOperativa).toHaveLength(12);
   });
 
+  it('rol 3 conserva la misma estructura y no filtra por grupo', async () => {
+    const { service, query } = createService([{ totalRegistros: 6 }]);
+
+    const result = await service.getCard(userRol3);
+
+    expect(Object.keys(result)).toEqual([
+      'card',
+      'estadisticaOperativa',
+      'estadoActual',
+      'registrosCapturistas',
+    ]);
+    for (const call of query.mock.calls) {
+      expect(String(call[0])).not.toContain('cv_scope');
+      expect(call[1] ?? []).toEqual([]);
+    }
+  });
+
+  it('rol 2 aplica EXISTS por IdGrupo del token en las 4 consultas', async () => {
+    const { service, query } = createService([{ totalRegistros: 3 }]);
+
+    const result = await service.getCard(userRol2Grupo1);
+
+    expect(query).toHaveBeenCalledTimes(4);
+    for (const call of query.mock.calls) {
+      expect(String(call[0])).toContain('FROM CapturistaVisita cv_scope');
+      expect(String(call[0])).toContain('cv_scope.IdGrupo = ?');
+      expect(call[1]).toEqual([1]);
+    }
+    expect(Object.keys(result)).toEqual([
+      'card',
+      'estadisticaOperativa',
+      'estadoActual',
+      'registrosCapturistas',
+    ]);
+    expect(result).not.toHaveProperty('filtroAplicado');
+    expect(result).not.toHaveProperty('IdGrupo');
+  });
+
+  it('rol 2 sin grupo responde 403', async () => {
+    const { service, query } = createService([{ totalRegistros: 0 }]);
+
+    await expect(service.getCard(userRol2SinGrupo)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rol 1 responde 403', async () => {
+    const { service, query } = createService([{ totalRegistros: 0 }]);
+
+    await expect(service.getCard(userRol1)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rol inválido responde 403', async () => {
+    const { service, query } = createService([{ totalRegistros: 0 }]);
+
+    await expect(service.getCard(userRolInvalido)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(query).not.toHaveBeenCalled();
+  });
+
   it('sin registros devuelve ceros, doce meses y estado diario estable', async () => {
     const { service } = createService(undefined, undefined, [
       {
@@ -137,7 +246,7 @@ describe('DashboardService.getCard', () => {
       },
     ]);
 
-    const result = await service.getCard();
+    const result = await service.getCard(userRol4);
 
     expect(result).toEqual({
       card: {
@@ -166,7 +275,7 @@ describe('DashboardService.getCard', () => {
   it('no ejecuta CapturaPeriodoService ni consultas de periodo', async () => {
     const { service, query } = createService([{ totalRegistros: 0 }], []);
 
-    await service.getCard();
+    await service.getCard(userRol4);
 
     expect(query).toHaveBeenCalledTimes(4);
     for (const call of query.mock.calls) {
@@ -194,7 +303,7 @@ describe('DashboardService.getCard', () => {
       ],
     );
 
-    const result = await service.getCard();
+    const result = await service.getCard(userRol4);
     const capturistasSql = String(query.mock.calls[3][0]);
 
     expect(result.registrosCapturistas).toEqual([
@@ -231,8 +340,10 @@ describe('DashboardController', () => {
       { obtenerCapturaPeriodo } as unknown as CapturaPeriodoService,
     );
 
-    await expect(controller.getCard()).resolves.toBe(response);
-    expect(getCard).toHaveBeenCalledWith();
+    await expect(
+      controller.getCard({ user: userRol4 }),
+    ).resolves.toBe(response);
+    expect(getCard).toHaveBeenCalledWith(userRol4);
     expect(obtenerCapturaPeriodo).not.toHaveBeenCalled();
     expect(Reflect.getMetadata(PATH_METADATA, DashboardController)).toBe(
       'dashboard',
@@ -276,8 +387,10 @@ describe('DashboardController', () => {
       fechaFinal: '2026-07-10',
     };
 
-    await expect(controller.obtenerCapturaPeriodo(dto)).resolves.toBe(response);
-    expect(obtenerCapturaPeriodo).toHaveBeenCalledWith(dto);
+    await expect(
+      controller.obtenerCapturaPeriodo(dto, { user: userRol3 }),
+    ).resolves.toBe(response);
+    expect(obtenerCapturaPeriodo).toHaveBeenCalledWith(dto, userRol3);
     expect(
       Reflect.getMetadata(
         PATH_METADATA,
